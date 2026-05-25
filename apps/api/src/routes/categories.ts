@@ -1,21 +1,54 @@
-import { createCategorySchema } from "@finance/shared";
-import { and, eq, type SQL } from "drizzle-orm";
+import { createCategorySchema, updateCategorySchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { db } from "../db";
-import { categories, households } from "../db/schema";
 import {
   genericArrayResponseSchema,
   genericObjectResponseSchema,
+  idParamSchema,
   nullableStringProperty,
 } from "../lib/docs";
-import { handleRouteError, notFound } from "../lib/http";
-import { createId } from "../lib/ids";
+import { handleRouteError } from "../lib/http";
+import {
+  archiveCategory,
+  createCategory,
+  getCategory,
+  listCategories,
+  updateCategory,
+} from "../services/categories-service";
 
 const listCategoriesQuerySchema = z.object({
   householdId: z.string().min(1),
   type: z.enum(["income", "expense", "transfer"]).optional(),
+  includeArchived: z.enum(["true", "false"]).optional(),
 });
+
+const idParamsSchema = z.object({
+  id: z.string().min(1),
+});
+
+const categoryBodySchema = {
+  type: "object",
+  required: ["householdId", "name", "type"],
+  properties: {
+    householdId: { type: "string" },
+    parentId: nullableStringProperty,
+    name: { type: "string", minLength: 1, maxLength: 120 },
+    type: { type: "string", enum: ["income", "expense", "transfer"] },
+    color: nullableStringProperty,
+    icon: nullableStringProperty,
+  },
+} as const;
+
+const updateCategoryBodySchema = {
+  type: "object",
+  properties: {
+    parentId: nullableStringProperty,
+    name: { type: "string", minLength: 1, maxLength: 120 },
+    type: { type: "string", enum: ["income", "expense", "transfer"] },
+    color: nullableStringProperty,
+    icon: nullableStringProperty,
+  },
+} as const;
 
 export const categoryRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -30,27 +63,42 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
           properties: {
             householdId: { type: "string" },
             type: { type: "string", enum: ["income", "expense", "transfer"] },
+            includeArchived: { type: "string", enum: ["true", "false"] },
           },
         },
-        response: {
-          200: genericArrayResponseSchema,
-        },
+        response: { 200: genericArrayResponseSchema },
       },
     },
     async (request, reply) => {
       try {
         const query = listCategoriesQuerySchema.parse(request.query);
-        const conditions: SQL[] = [eq(categories.householdId, query.householdId)];
 
-        if (query.type) {
-          conditions.push(eq(categories.type, query.type));
-        }
+        return listCategories({
+          householdId: query.householdId,
+          type: query.type,
+          includeArchived: query.includeArchived === "true",
+        });
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 
-        return db
-          .select()
-          .from(categories)
-          .where(and(...conditions))
-          .all();
+  app.get(
+    "/:id",
+    {
+      schema: {
+        tags: ["Categories"],
+        summary: "Busca uma categoria",
+        params: idParamSchema,
+        response: { 200: genericObjectResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+
+        return getCategory(params.id);
       } catch (error) {
         return handleRouteError(reply, error);
       }
@@ -63,65 +111,59 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Categories"],
         summary: "Cria uma categoria",
-        body: {
-          type: "object",
-          required: ["householdId", "name", "type"],
-          properties: {
-            householdId: { type: "string" },
-            parentId: nullableStringProperty,
-            name: { type: "string", minLength: 1, maxLength: 120 },
-            type: { type: "string", enum: ["income", "expense", "transfer"] },
-            color: nullableStringProperty,
-            icon: nullableStringProperty,
-          },
-        },
-        response: {
-          201: genericObjectResponseSchema,
-        },
+        body: categoryBodySchema,
+        response: { 201: genericObjectResponseSchema },
       },
     },
     async (request, reply) => {
       try {
         const input = createCategorySchema.parse(request.body);
-        const household = db
-          .select()
-          .from(households)
-          .where(eq(households.id, input.householdId))
-          .get();
 
-        if (!household) {
-          notFound("Casa nao encontrada.");
-        }
+        return reply.status(201).send(createCategory(input));
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 
-        if (input.parentId) {
-          const parent = db
-            .select()
-            .from(categories)
-            .where(eq(categories.id, input.parentId))
-            .get();
+  app.put(
+    "/:id",
+    {
+      schema: {
+        tags: ["Categories"],
+        summary: "Atualiza uma categoria",
+        params: idParamSchema,
+        body: updateCategoryBodySchema,
+        response: { 200: genericObjectResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+        const input = updateCategorySchema.parse(request.body);
 
-          if (!parent || parent.householdId !== input.householdId) {
-            notFound("Categoria pai nao encontrada nesta casa.");
-          }
-        }
+        return updateCategory(params.id, input);
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 
-        const id = createId();
+  app.delete(
+    "/:id",
+    {
+      schema: {
+        tags: ["Categories"],
+        summary: "Arquiva uma categoria",
+        params: idParamSchema,
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+        archiveCategory(params.id);
 
-        db.insert(categories)
-          .values({
-            id,
-            householdId: input.householdId,
-            parentId: input.parentId ?? null,
-            name: input.name,
-            type: input.type,
-            color: input.color ?? null,
-            icon: input.icon ?? null,
-          })
-          .run();
-
-        const category = db.select().from(categories).where(eq(categories.id, id)).get();
-
-        return reply.status(201).send(category);
+        return reply.status(204).send();
       } catch (error) {
         return handleRouteError(reply, error);
       }

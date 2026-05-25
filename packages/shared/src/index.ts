@@ -42,6 +42,7 @@ export const createPersonSchema = z.object({
   color: z.string().trim().max(32).nullable().optional(),
   avatarUrl: z.string().trim().url().nullable().optional(),
 });
+export const updatePersonSchema = createPersonSchema.omit({ householdId: true }).partial();
 
 export const createCategorySchema = z.object({
   householdId: idSchema,
@@ -51,6 +52,7 @@ export const createCategorySchema = z.object({
   color: z.string().trim().max(32).nullable().optional(),
   icon: z.string().trim().max(80).nullable().optional(),
 });
+export const updateCategorySchema = createCategorySchema.omit({ householdId: true }).partial();
 
 export const createAccountSchema = z.object({
   householdId: idSchema,
@@ -66,6 +68,7 @@ export const createAccountSchema = z.object({
   statementDueDay: z.number().int().min(1).max(31).nullable().optional(),
   isShared: z.boolean().default(false),
 });
+export const updateAccountSchema = createAccountSchema.omit({ householdId: true }).partial();
 
 export const updateSettingsSchema = z.object({
   currency: z.string().trim().length(3).optional(),
@@ -80,11 +83,13 @@ export const createTagSchema = z.object({
   name: z.string().trim().min(1).max(80),
   color: z.string().trim().max(32).nullable().optional(),
 });
+export const updateTagSchema = createTagSchema.omit({ householdId: true }).partial();
 
 export const createPayeeSchema = z.object({
   householdId: idSchema,
   name: z.string().trim().min(1).max(160),
 });
+export const updatePayeeSchema = createPayeeSchema.omit({ householdId: true }).partial();
 
 const transactionPayloadSchema = z
   .object({
@@ -149,8 +154,13 @@ export const createTransactionSchema = transactionPayloadSchema;
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 export type CreatePersonInput = z.infer<typeof createPersonSchema>;
+export type UpdatePersonInput = z.infer<typeof updatePersonSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
+export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
+export type UpdateTagInput = z.infer<typeof updateTagSchema>;
 export type CreatePayeeInput = z.infer<typeof createPayeeSchema>;
+export type UpdatePayeeInput = z.infer<typeof updatePayeeSchema>;

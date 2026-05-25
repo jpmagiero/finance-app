@@ -1,21 +1,41 @@
-import { createTagSchema } from "@finance/shared";
-import { eq } from "drizzle-orm";
+import { createTagSchema, updateTagSchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { db } from "../db";
-import { households, tags } from "../db/schema";
 import {
   genericArrayResponseSchema,
   genericObjectResponseSchema,
   householdIdQuerySchema,
+  idParamSchema,
   nullableStringProperty,
 } from "../lib/docs";
-import { handleRouteError, notFound } from "../lib/http";
-import { createId } from "../lib/ids";
+import { handleRouteError } from "../lib/http";
+import { createTag, deleteTag, getTag, listTags, updateTag } from "../services/tags-service";
 
 const listTagsQuerySchema = z.object({
   householdId: z.string().min(1),
 });
+
+const idParamsSchema = z.object({
+  id: z.string().min(1),
+});
+
+const tagBodySchema = {
+  type: "object",
+  required: ["householdId", "name"],
+  properties: {
+    householdId: { type: "string" },
+    name: { type: "string", minLength: 1, maxLength: 80 },
+    color: nullableStringProperty,
+  },
+} as const;
+
+const updateTagBodySchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 80 },
+    color: nullableStringProperty,
+  },
+} as const;
 
 export const tagRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -25,16 +45,35 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
         tags: ["Tags"],
         summary: "Lista tags de uma casa",
         querystring: householdIdQuerySchema,
-        response: {
-          200: genericArrayResponseSchema,
-        },
+        response: { 200: genericArrayResponseSchema },
       },
     },
     async (request, reply) => {
       try {
         const query = listTagsQuerySchema.parse(request.query);
 
-        return db.select().from(tags).where(eq(tags.householdId, query.householdId)).all();
+        return listTags(query.householdId);
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
+
+  app.get(
+    "/:id",
+    {
+      schema: {
+        tags: ["Tags"],
+        summary: "Busca uma tag",
+        params: idParamSchema,
+        response: { 200: genericObjectResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+
+        return getTag(params.id);
       } catch (error) {
         return handleRouteError(reply, error);
       }
@@ -47,47 +86,59 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Tags"],
         summary: "Cria uma tag",
-        body: {
-          type: "object",
-          required: ["householdId", "name"],
-          properties: {
-            householdId: { type: "string" },
-            name: { type: "string", minLength: 1, maxLength: 80 },
-            color: nullableStringProperty,
-          },
-        },
-        response: {
-          201: genericObjectResponseSchema,
-        },
+        body: tagBodySchema,
+        response: { 201: genericObjectResponseSchema },
       },
     },
     async (request, reply) => {
       try {
         const input = createTagSchema.parse(request.body);
-        const household = db
-          .select()
-          .from(households)
-          .where(eq(households.id, input.householdId))
-          .get();
 
-        if (!household) {
-          notFound("Casa nao encontrada.");
-        }
+        return reply.status(201).send(createTag(input));
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 
-        const id = createId();
+  app.put(
+    "/:id",
+    {
+      schema: {
+        tags: ["Tags"],
+        summary: "Atualiza uma tag",
+        params: idParamSchema,
+        body: updateTagBodySchema,
+        response: { 200: genericObjectResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+        const input = updateTagSchema.parse(request.body);
 
-        db.insert(tags)
-          .values({
-            id,
-            householdId: input.householdId,
-            name: input.name,
-            color: input.color ?? null,
-          })
-          .run();
+        return updateTag(params.id, input);
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 
-        const tag = db.select().from(tags).where(eq(tags.id, id)).get();
+  app.delete(
+    "/:id",
+    {
+      schema: {
+        tags: ["Tags"],
+        summary: "Exclui uma tag se nao estiver em uso",
+        params: idParamSchema,
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = idParamsSchema.parse(request.params);
+        deleteTag(params.id);
 
-        return reply.status(201).send(tag);
+        return reply.status(204).send();
       } catch (error) {
         return handleRouteError(reply, error);
       }
