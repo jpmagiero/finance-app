@@ -1,0 +1,28 @@
+{
+  "name": "finance-app",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @finance/api --filter @finance/web dev",
+    "dev:api": "pnpm --filter @finance/api dev",
+    "dev:web": "pnpm --filter @finance/web dev",
+    "build": "pnpm -r build",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @finance/api db:generate",
+    "db:migrate": "pnpm --filter @finance/api db:migrate",
+    "db:seed": "pnpm --filter @finance/api db:seed",
+    "db:studio": "pnpm --filter @finance/api db:studio"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.6",
+    "typescript": "^5.8.3"
+  }
+}

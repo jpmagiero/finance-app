@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+.turbo
+.vite
+
+.env
+.env.*
+!.env.example
+
+apps/api/data/*.sqlite
+apps/api/data/*.sqlite-*
+
+*.log
+*.tsbuildinfo
+.DS_Store
