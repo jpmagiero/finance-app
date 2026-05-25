@@ -4,6 +4,12 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { db } from "../db";
 import { householdPeople, households, users } from "../db/schema";
+import {
+  genericArrayResponseSchema,
+  genericObjectResponseSchema,
+  householdIdQuerySchema,
+  nullableStringProperty,
+} from "../lib/docs";
 import { handleRouteError, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 
@@ -12,59 +18,95 @@ const listPeopleQuerySchema = z.object({
 });
 
 export const peopleRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/", async (request, reply) => {
-    try {
-      const query = listPeopleQuerySchema.parse(request.query);
+  app.get(
+    "/",
+    {
+      schema: {
+        tags: ["People"],
+        summary: "Lista pessoas financeiras de uma casa",
+        querystring: householdIdQuerySchema,
+        response: {
+          200: genericArrayResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const query = listPeopleQuerySchema.parse(request.query);
 
-      return db
-        .select()
-        .from(householdPeople)
-        .where(eq(householdPeople.householdId, query.householdId))
-        .all();
-    } catch (error) {
-      return handleRouteError(reply, error);
-    }
-  });
-
-  app.post("/", async (request, reply) => {
-    try {
-      const input = createPersonSchema.parse(request.body);
-      const household = db
-        .select()
-        .from(households)
-        .where(eq(households.id, input.householdId))
-        .get();
-
-      if (!household) {
-        notFound("Casa nao encontrada.");
+        return db
+          .select()
+          .from(householdPeople)
+          .where(eq(householdPeople.householdId, query.householdId))
+          .all();
+      } catch (error) {
+        return handleRouteError(reply, error);
       }
+    },
+  );
 
-      if (input.userId) {
-        const user = db.select().from(users).where(eq(users.id, input.userId)).get();
+  app.post(
+    "/",
+    {
+      schema: {
+        tags: ["People"],
+        summary: "Cria uma pessoa financeira na casa",
+        body: {
+          type: "object",
+          required: ["householdId", "name"],
+          properties: {
+            householdId: { type: "string" },
+            userId: nullableStringProperty,
+            name: { type: "string", minLength: 1, maxLength: 120 },
+            color: nullableStringProperty,
+            avatarUrl: nullableStringProperty,
+          },
+        },
+        response: {
+          201: genericObjectResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const input = createPersonSchema.parse(request.body);
+        const household = db
+          .select()
+          .from(households)
+          .where(eq(households.id, input.householdId))
+          .get();
 
-        if (!user) {
-          notFound("Usuario nao encontrado.");
+        if (!household) {
+          notFound("Casa nao encontrada.");
         }
+
+        if (input.userId) {
+          const user = db.select().from(users).where(eq(users.id, input.userId)).get();
+
+          if (!user) {
+            notFound("Usuario nao encontrado.");
+          }
+        }
+
+        const id = createId();
+
+        db.insert(householdPeople)
+          .values({
+            id,
+            householdId: input.householdId,
+            userId: input.userId ?? null,
+            name: input.name,
+            color: input.color ?? null,
+            avatarUrl: input.avatarUrl ?? null,
+          })
+          .run();
+
+        const person = db.select().from(householdPeople).where(eq(householdPeople.id, id)).get();
+
+        return reply.status(201).send(person);
+      } catch (error) {
+        return handleRouteError(reply, error);
       }
-
-      const id = createId();
-
-      db.insert(householdPeople)
-        .values({
-          id,
-          householdId: input.householdId,
-          userId: input.userId ?? null,
-          name: input.name,
-          color: input.color ?? null,
-          avatarUrl: input.avatarUrl ?? null,
-        })
-        .run();
-
-      const person = db.select().from(householdPeople).where(eq(householdPeople.id, id)).get();
-
-      return reply.status(201).send(person);
-    } catch (error) {
-      return handleRouteError(reply, error);
-    }
-  });
+    },
+  );
 };

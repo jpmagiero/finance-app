@@ -14,6 +14,13 @@ import {
   transactions,
   transactionTags,
 } from "../db/schema";
+import {
+  dateStringProperty,
+  genericArrayResponseSchema,
+  genericObjectResponseSchema,
+  idParamSchema,
+  nullableStringProperty,
+} from "../lib/docs";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -128,247 +135,335 @@ function normalizeTransactionInput(input: z.infer<typeof createTransactionSchema
 }
 
 export const transactionRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/", async (request, reply) => {
-    try {
-      const query = listTransactionsQuerySchema.parse(request.query);
-      const conditions: SQL[] = [
-        eq(transactions.householdId, query.householdId),
-        isNull(transactions.deletedAt),
-      ];
+  app.get(
+    "/",
+    {
+      schema: {
+        tags: ["Transactions"],
+        summary: "Lista transacoes de uma casa",
+        querystring: {
+          type: "object",
+          required: ["householdId"],
+          properties: {
+            householdId: { type: "string" },
+            personId: { type: "string" },
+            accountId: { type: "string" },
+            type: { type: "string", enum: ["income", "expense", "transfer", "adjustment"] },
+            status: { type: "string", enum: ["pending", "confirmed", "canceled"] },
+            from: dateStringProperty,
+            to: dateStringProperty,
+            limit: { type: "integer", minimum: 1, maximum: 200, default: 50 },
+          },
+        },
+        response: {
+          200: genericArrayResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const query = listTransactionsQuerySchema.parse(request.query);
+        const conditions: SQL[] = [
+          eq(transactions.householdId, query.householdId),
+          isNull(transactions.deletedAt),
+        ];
 
-      if (query.personId) {
-        conditions.push(eq(transactions.personId, query.personId));
-      }
-
-      if (query.accountId) {
-        conditions.push(eq(transactions.accountId, query.accountId));
-      }
-
-      if (query.type) {
-        conditions.push(eq(transactions.type, query.type));
-      }
-
-      if (query.status) {
-        conditions.push(eq(transactions.status, query.status));
-      }
-
-      if (query.from) {
-        conditions.push(gte(transactions.transactionDate, query.from));
-      }
-
-      if (query.to) {
-        conditions.push(lte(transactions.transactionDate, query.to));
-      }
-
-      return db
-        .select()
-        .from(transactions)
-        .where(and(...conditions))
-        .orderBy(desc(transactions.transactionDate), desc(transactions.createdAt))
-        .limit(query.limit)
-        .all();
-    } catch (error) {
-      return handleRouteError(reply, error);
-    }
-  });
-
-  app.post("/", async (request, reply) => {
-    try {
-      const input = normalizeTransactionInput(createTransactionSchema.parse(request.body));
-
-      ensureHouseholdExists(input.householdId);
-      ensureHouseholdReferences(input);
-
-      if (input.type !== "transfer" && input.transferAccountId) {
-        badRequest("Apenas transferencias podem ter conta de destino.");
-      }
-
-      const transactionId = createId();
-      const timestamp = now();
-
-      db.transaction((tx) => {
-        tx.insert(transactions)
-          .values({
-            id: transactionId,
-            householdId: input.householdId,
-            personId: input.personId,
-            accountId: input.accountId,
-            payeeId: input.payeeId,
-            type: input.type,
-            status: input.status,
-            amountCents: input.amountCents,
-            description: input.description,
-            notes: input.notes,
-            transactionDate: input.transactionDate,
-            competenceDate: input.competenceDate,
-            transferAccountId: input.transferAccountId,
-          })
-          .run();
-
-        if (input.status === "confirmed" && input.accountId && input.type === "income") {
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`${accounts.currentBalanceCents} + ${input.amountCents}`,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, input.accountId))
-            .run();
+        if (query.personId) {
+          conditions.push(eq(transactions.personId, query.personId));
         }
 
-        if (input.status === "confirmed" && input.accountId && input.type === "expense") {
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`${accounts.currentBalanceCents} - ${input.amountCents}`,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, input.accountId))
-            .run();
+        if (query.accountId) {
+          conditions.push(eq(transactions.accountId, query.accountId));
         }
 
-        if (
-          input.status === "confirmed" &&
-          input.accountId &&
-          input.transferAccountId &&
-          input.type === "transfer"
-        ) {
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`${accounts.currentBalanceCents} - ${input.amountCents}`,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, input.accountId))
-            .run();
-
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`${accounts.currentBalanceCents} + ${input.amountCents}`,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, input.transferAccountId))
-            .run();
+        if (query.type) {
+          conditions.push(eq(transactions.type, query.type));
         }
 
-        for (const split of input.splits) {
-          tx.insert(transactionSplits)
+        if (query.status) {
+          conditions.push(eq(transactions.status, query.status));
+        }
+
+        if (query.from) {
+          conditions.push(gte(transactions.transactionDate, query.from));
+        }
+
+        if (query.to) {
+          conditions.push(lte(transactions.transactionDate, query.to));
+        }
+
+        return db
+          .select()
+          .from(transactions)
+          .where(and(...conditions))
+          .orderBy(desc(transactions.transactionDate), desc(transactions.createdAt))
+          .limit(query.limit)
+          .all();
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    "/",
+    {
+      schema: {
+        tags: ["Transactions"],
+        summary: "Cria uma transacao",
+        body: {
+          type: "object",
+          required: ["householdId", "type", "amountCents", "transactionDate", "splits"],
+          properties: {
+            householdId: { type: "string" },
+            personId: nullableStringProperty,
+            accountId: nullableStringProperty,
+            payeeId: nullableStringProperty,
+            type: { type: "string", enum: ["income", "expense", "transfer", "adjustment"] },
+            status: {
+              type: "string",
+              enum: ["pending", "confirmed", "canceled"],
+              default: "confirmed",
+            },
+            amountCents: { type: "integer", minimum: 1 },
+            description: nullableStringProperty,
+            notes: nullableStringProperty,
+            transactionDate: dateStringProperty,
+            competenceDate: nullableStringProperty,
+            transferAccountId: nullableStringProperty,
+            splits: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                required: ["amountCents"],
+                properties: {
+                  categoryId: nullableStringProperty,
+                  amountCents: { type: "integer", minimum: 1 },
+                  description: nullableStringProperty,
+                },
+              },
+            },
+            tagIds: {
+              type: "array",
+              items: { type: "string" },
+              default: [],
+            },
+          },
+        },
+        response: {
+          201: genericObjectResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const input = normalizeTransactionInput(createTransactionSchema.parse(request.body));
+
+        ensureHouseholdExists(input.householdId);
+        ensureHouseholdReferences(input);
+
+        if (input.type !== "transfer" && input.transferAccountId) {
+          badRequest("Apenas transferencias podem ter conta de destino.");
+        }
+
+        const transactionId = createId();
+        const timestamp = now();
+
+        db.transaction((tx) => {
+          tx.insert(transactions)
             .values({
-              id: createId(),
-              transactionId,
-              categoryId: split.categoryId ?? null,
-              amountCents: split.amountCents,
-              description: split.description ?? null,
+              id: transactionId,
+              householdId: input.householdId,
+              personId: input.personId,
+              accountId: input.accountId,
+              payeeId: input.payeeId,
+              type: input.type,
+              status: input.status,
+              amountCents: input.amountCents,
+              description: input.description,
+              notes: input.notes,
+              transactionDate: input.transactionDate,
+              competenceDate: input.competenceDate,
+              transferAccountId: input.transferAccountId,
             })
             .run();
-        }
 
-        for (const tagId of input.tagIds) {
-          tx.insert(transactionTags)
-            .values({
-              transactionId,
-              tagId,
-            })
-            .run();
-        }
-      });
+          if (input.status === "confirmed" && input.accountId && input.type === "income") {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`${accounts.currentBalanceCents} + ${input.amountCents}`,
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, input.accountId))
+              .run();
+          }
 
-      const transaction = db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.id, transactionId))
-        .get();
+          if (input.status === "confirmed" && input.accountId && input.type === "expense") {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`${accounts.currentBalanceCents} - ${input.amountCents}`,
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, input.accountId))
+              .run();
+          }
 
-      return reply.status(201).send(transaction);
-    } catch (error) {
-      return handleRouteError(reply, error);
-    }
-  });
+          if (
+            input.status === "confirmed" &&
+            input.accountId &&
+            input.transferAccountId &&
+            input.type === "transfer"
+          ) {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`${accounts.currentBalanceCents} - ${input.amountCents}`,
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, input.accountId))
+              .run();
 
-  app.delete("/:id", async (request, reply) => {
-    try {
-      const params = transactionParamsSchema.parse(request.params);
-      const transaction = db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.id, params.id))
-        .get();
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`${accounts.currentBalanceCents} + ${input.amountCents}`,
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, input.transferAccountId))
+              .run();
+          }
 
-      if (!transaction || transaction.deletedAt) {
-        notFound("Transacao nao encontrada.");
+          for (const split of input.splits) {
+            tx.insert(transactionSplits)
+              .values({
+                id: createId(),
+                transactionId,
+                categoryId: split.categoryId ?? null,
+                amountCents: split.amountCents,
+                description: split.description ?? null,
+              })
+              .run();
+          }
+
+          for (const tagId of input.tagIds) {
+            tx.insert(transactionTags)
+              .values({
+                transactionId,
+                tagId,
+              })
+              .run();
+          }
+        });
+
+        const transaction = db
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, transactionId))
+          .get();
+
+        return reply.status(201).send(transaction);
+      } catch (error) {
+        return handleRouteError(reply, error);
       }
+    },
+  );
 
-      const timestamp = now();
-
-      db.transaction((tx) => {
-        tx.update(transactions)
-          .set({
-            deletedAt: timestamp,
-            updatedAt: timestamp,
-          })
+  app.delete(
+    "/:id",
+    {
+      schema: {
+        tags: ["Transactions"],
+        summary: "Remove uma transacao com soft delete",
+        params: idParamSchema,
+      },
+    },
+    async (request, reply) => {
+      try {
+        const params = transactionParamsSchema.parse(request.params);
+        const transaction = db
+          .select()
+          .from(transactions)
           .where(eq(transactions.id, params.id))
-          .run();
+          .get();
 
-        if (
-          transaction.status === "confirmed" &&
-          transaction.accountId &&
-          transaction.type === "income"
-        ) {
-          tx.update(accounts)
+        if (!transaction || transaction.deletedAt) {
+          notFound("Transacao nao encontrada.");
+        }
+
+        const timestamp = now();
+
+        db.transaction((tx) => {
+          tx.update(transactions)
             .set({
-              currentBalanceCents: sql`
+              deletedAt: timestamp,
+              updatedAt: timestamp,
+            })
+            .where(eq(transactions.id, params.id))
+            .run();
+
+          if (
+            transaction.status === "confirmed" &&
+            transaction.accountId &&
+            transaction.type === "income"
+          ) {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`
                 ${accounts.currentBalanceCents} - ${transaction.amountCents}
               `,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, transaction.accountId))
-            .run();
-        }
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, transaction.accountId))
+              .run();
+          }
 
-        if (
-          transaction.status === "confirmed" &&
-          transaction.accountId &&
-          transaction.type === "expense"
-        ) {
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`
+          if (
+            transaction.status === "confirmed" &&
+            transaction.accountId &&
+            transaction.type === "expense"
+          ) {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`
                 ${accounts.currentBalanceCents} + ${transaction.amountCents}
               `,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, transaction.accountId))
-            .run();
-        }
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, transaction.accountId))
+              .run();
+          }
 
-        if (
-          transaction.status === "confirmed" &&
-          transaction.accountId &&
-          transaction.transferAccountId &&
-          transaction.type === "transfer"
-        ) {
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`
+          if (
+            transaction.status === "confirmed" &&
+            transaction.accountId &&
+            transaction.transferAccountId &&
+            transaction.type === "transfer"
+          ) {
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`
                 ${accounts.currentBalanceCents} + ${transaction.amountCents}
               `,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, transaction.accountId))
-            .run();
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, transaction.accountId))
+              .run();
 
-          tx.update(accounts)
-            .set({
-              currentBalanceCents: sql`
+            tx.update(accounts)
+              .set({
+                currentBalanceCents: sql`
                 ${accounts.currentBalanceCents} - ${transaction.amountCents}
               `,
-              updatedAt: timestamp,
-            })
-            .where(eq(accounts.id, transaction.transferAccountId))
-            .run();
-        }
-      });
+                updatedAt: timestamp,
+              })
+              .where(eq(accounts.id, transaction.transferAccountId))
+              .run();
+          }
+        });
 
-      return reply.status(204).send();
-    } catch (error) {
-      return handleRouteError(reply, error);
-    }
-  });
+        return reply.status(204).send();
+      } catch (error) {
+        return handleRouteError(reply, error);
+      }
+    },
+  );
 };

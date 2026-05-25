@@ -2,7 +2,7 @@ import "dotenv/config";
 import { buildApp } from "./app";
 import { env } from "./env";
 
-const app = buildApp();
+const app = await buildApp();
 
 try {
   await app.listen({

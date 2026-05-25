@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { appName } from "@finance/shared";
 import Fastify from "fastify";
+import { registerSwagger } from "./plugins/swagger";
 import { accountRoutes } from "./routes/accounts";
 import { categoryRoutes } from "./routes/categories";
 import { dashboardRoutes } from "./routes/dashboard";
@@ -12,14 +13,15 @@ import { settingsRoutes } from "./routes/settings";
 import { tagRoutes } from "./routes/tags";
 import { transactionRoutes } from "./routes/transactions";
 
-export function buildApp() {
+export async function buildApp() {
   const app = Fastify({
     logger: true,
   });
 
-  app.register(cors, {
+  await app.register(cors, {
     origin: true,
   });
+  await registerSwagger(app);
 
   app.register(healthRoutes, {
     prefix: "/health",
@@ -52,10 +54,19 @@ export function buildApp() {
     prefix: "/dashboard",
   });
 
-  app.get("/", async () => ({
-    name: appName,
-    status: "ok",
-  }));
+  app.get(
+    "/",
+    {
+      schema: {
+        tags: ["Health"],
+        summary: "Informacoes basicas da API",
+      },
+    },
+    async () => ({
+      name: appName,
+      status: "ok",
+    }),
+  );
 
   return app;
 }
