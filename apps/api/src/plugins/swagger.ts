@@ -2,6 +2,8 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { appName } from "@finance/shared";
 import type { FastifyInstance } from "fastify";
+import { jsonSchemaTransform } from "fastify-type-provider-zod";
+import { env } from "../env";
 
 export async function registerSwagger(app: FastifyInstance) {
   await app.register(swagger, {
@@ -13,7 +15,7 @@ export async function registerSwagger(app: FastifyInstance) {
       },
       servers: [
         {
-          url: "http://localhost:3333",
+          url: `http://localhost:${env.PORT}`,
           description: "Servidor local",
         },
       ],
@@ -30,14 +32,17 @@ export async function registerSwagger(app: FastifyInstance) {
         { name: "Dashboard", description: "Resumo e indicadores" },
       ],
     },
+    transform: jsonSchemaTransform,
   });
 
-  await app.register(swaggerUi, {
-    routePrefix: "/docs",
-    uiConfig: {
-      docExpansion: "list",
-      deepLinking: true,
-    },
-    staticCSP: true,
-  });
+  if (env.NODE_ENV !== "production") {
+    await app.register(swaggerUi, {
+      routePrefix: "/docs",
+      uiConfig: {
+        docExpansion: "list",
+        deepLinking: true,
+      },
+      staticCSP: true,
+    });
+  }
 }

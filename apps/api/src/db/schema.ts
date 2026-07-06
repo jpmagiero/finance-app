@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
   index,
@@ -8,10 +7,20 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { now } from "../lib/normalize";
 
+// Timestamps sempre em ISO-8601 UTC gerados pela aplicacao ($defaultFn).
+// Nao usar DEFAULT CURRENT_TIMESTAMP no DDL: alem de gravar outro formato
+// ("YYYY-MM-DD HH:MM:SS"), a presenca do default SQL faz o drizzle ignorar
+// o $defaultFn no insert.
 const timestamps = {
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => now()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => now())
+    .$onUpdateFn(() => now()),
 };
 
 export const users = sqliteTable(
@@ -256,6 +265,8 @@ export const transactions = sqliteTable(
       table.transactionDate,
     ),
     accountIdx: index("transactions_account_idx").on(table.accountId),
+    transferAccountIdx: index("transactions_transfer_account_idx").on(table.transferAccountId),
+    payeeIdx: index("transactions_payee_idx").on(table.payeeId),
     personIdx: index("transactions_person_idx").on(table.personId),
     typeIdx: index("transactions_type_idx").on(table.type),
     statusIdx: index("transactions_status_idx").on(table.status),
@@ -310,6 +321,7 @@ export const transactionTags = sqliteTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.transactionId, table.tagId] }),
+    tagIdx: index("transaction_tags_tag_idx").on(table.tagId),
   }),
 );
 

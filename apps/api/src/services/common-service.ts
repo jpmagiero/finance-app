@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { householdPeople, households, users } from "../db/schema";
+import { householdMembers, householdPeople, households, users } from "../db/schema";
 import { notFound } from "../lib/http";
 
 export function ensureHouseholdExists(householdId: string) {
@@ -21,6 +21,24 @@ export function ensureUserExists(userId: string) {
   }
 
   return user;
+}
+
+// Vinculo pessoa-usuario exige adesao previa do usuario a casa: referencia a
+// usuario de outra casa (ou sem casa) e cross-tenant e nao pode ser persistida.
+export function ensureUserBelongsToHousehold(userId: string, householdId: string) {
+  ensureUserExists(userId);
+
+  const member = db
+    .select()
+    .from(householdMembers)
+    .where(and(eq(householdMembers.userId, userId), eq(householdMembers.householdId, householdId)))
+    .get();
+
+  if (!member) {
+    notFound("Usuario nao e membro desta casa.");
+  }
+
+  return member;
 }
 
 export function ensurePersonBelongsToHousehold(personId: string, householdId: string) {

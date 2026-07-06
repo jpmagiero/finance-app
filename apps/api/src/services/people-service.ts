@@ -1,11 +1,11 @@
 import type { CreatePersonInput, UpdatePersonInput } from "@finance/shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { householdPeople } from "../db/schema";
 import { notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
-import { ensureHouseholdExists, ensureUserExists } from "./common-service";
+import { ensureHouseholdExists, ensureUserBelongsToHousehold } from "./common-service";
 
 export function listPeople(householdId: string) {
   ensureHouseholdExists(householdId);
@@ -17,11 +17,15 @@ export function listPeople(householdId: string) {
     .all();
 }
 
-export function getPerson(id: string) {
-  const person = db.select().from(householdPeople).where(eq(householdPeople.id, id)).get();
+export function getPerson(householdId: string, id: string) {
+  const person = db
+    .select()
+    .from(householdPeople)
+    .where(and(eq(householdPeople.id, id), eq(householdPeople.householdId, householdId)))
+    .get();
 
   if (!person) {
-    notFound("Pessoa nao encontrada.");
+    notFound("Pessoa nao encontrada nesta casa.");
   }
 
   return person;
@@ -31,7 +35,7 @@ export function createPerson(input: CreatePersonInput) {
   ensureHouseholdExists(input.householdId);
 
   if (input.userId) {
-    ensureUserExists(input.userId);
+    ensureUserBelongsToHousehold(input.userId, input.householdId);
   }
 
   const id = createId();
@@ -47,19 +51,19 @@ export function createPerson(input: CreatePersonInput) {
     })
     .run();
 
-  return getPerson(id);
+  return getPerson(input.householdId, id);
 }
 
-export function updatePerson(id: string, input: UpdatePersonInput) {
-  const person = getPerson(id);
+export function updatePerson(householdId: string, id: string, input: UpdatePersonInput) {
+  const person = getPerson(householdId, id);
 
   if (input.userId) {
-    ensureUserExists(input.userId);
+    ensureUserBelongsToHousehold(input.userId, householdId);
   }
 
   db.update(householdPeople)
     .set({
-      userId: input.userId ?? person.userId,
+      userId: input.userId === undefined ? person.userId : input.userId,
       name: input.name ?? person.name,
       color: input.color === undefined ? person.color : input.color,
       avatarUrl: input.avatarUrl === undefined ? person.avatarUrl : input.avatarUrl,
@@ -68,11 +72,11 @@ export function updatePerson(id: string, input: UpdatePersonInput) {
     .where(eq(householdPeople.id, id))
     .run();
 
-  return getPerson(id);
+  return getPerson(householdId, id);
 }
 
-export function archivePerson(id: string) {
-  getPerson(id);
+export function archivePerson(householdId: string, id: string) {
+  getPerson(householdId, id);
 
   db.update(householdPeople)
     .set({

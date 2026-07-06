@@ -1,13 +1,17 @@
-import { createCategorySchema, updateCategorySchema } from "@finance/shared";
+import {
+  categorySchema,
+  categoryTypes,
+  createCategorySchema,
+  updateCategorySchema,
+} from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  genericArrayResponseSchema,
-  genericObjectResponseSchema,
-  idParamSchema,
-  nullableStringProperty,
-} from "../lib/docs";
-import { handleRouteError } from "../lib/http";
+  householdQuerySchema,
+  idParamsSchema,
+  noContentResponseSchema,
+} from "../lib/route-schemas";
 import {
   archiveCategory,
   createCategory,
@@ -16,72 +20,28 @@ import {
   updateCategory,
 } from "../services/categories-service";
 
-const listCategoriesQuerySchema = z.object({
-  householdId: z.string().min(1),
-  type: z.enum(["income", "expense", "transfer"]).optional(),
-  includeArchived: z.enum(["true", "false"]).optional(),
+const listCategoriesQuerySchema = householdQuerySchema.extend({
+  type: z.enum(categoryTypes).optional(),
+  includeArchived: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 
-const idParamsSchema = z.object({
-  id: z.string().min(1),
-});
+export const categoryRoutes: FastifyPluginAsync = async (rawApp) => {
+  const app = rawApp.withTypeProvider<ZodTypeProvider>();
 
-const categoryBodySchema = {
-  type: "object",
-  required: ["householdId", "name", "type"],
-  properties: {
-    householdId: { type: "string" },
-    parentId: nullableStringProperty,
-    name: { type: "string", minLength: 1, maxLength: 120 },
-    type: { type: "string", enum: ["income", "expense", "transfer"] },
-    color: nullableStringProperty,
-    icon: nullableStringProperty,
-  },
-} as const;
-
-const updateCategoryBodySchema = {
-  type: "object",
-  properties: {
-    parentId: nullableStringProperty,
-    name: { type: "string", minLength: 1, maxLength: 120 },
-    type: { type: "string", enum: ["income", "expense", "transfer"] },
-    color: nullableStringProperty,
-    icon: nullableStringProperty,
-  },
-} as const;
-
-export const categoryRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/",
     {
       schema: {
         tags: ["Categories"],
         summary: "Lista categorias de uma casa",
-        querystring: {
-          type: "object",
-          required: ["householdId"],
-          properties: {
-            householdId: { type: "string" },
-            type: { type: "string", enum: ["income", "expense", "transfer"] },
-            includeArchived: { type: "string", enum: ["true", "false"] },
-          },
-        },
-        response: { 200: genericArrayResponseSchema },
+        querystring: listCategoriesQuerySchema,
+        response: { 200: z.array(categorySchema) },
       },
     },
-    async (request, reply) => {
-      try {
-        const query = listCategoriesQuerySchema.parse(request.query);
-
-        return listCategories({
-          householdId: query.householdId,
-          type: query.type,
-          includeArchived: query.includeArchived === "true",
-        });
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => listCategories(request.query),
   );
 
   app.get(
@@ -90,19 +50,12 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Categories"],
         summary: "Busca uma categoria",
-        params: idParamSchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 200: categorySchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-
-        return getCategory(params.id);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => getCategory(request.query.householdId, request.params.id),
   );
 
   app.post(
@@ -111,19 +64,11 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Categories"],
         summary: "Cria uma categoria",
-        body: categoryBodySchema,
-        response: { 201: genericObjectResponseSchema },
+        body: createCategorySchema,
+        response: { 201: categorySchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const input = createCategorySchema.parse(request.body);
-
-        return reply.status(201).send(createCategory(input));
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request, reply) => reply.status(201).send(createCategory(request.body)),
   );
 
   app.put(
@@ -132,21 +77,13 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Categories"],
         summary: "Atualiza uma categoria",
-        params: idParamSchema,
-        body: updateCategoryBodySchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        body: updateCategorySchema,
+        response: { 200: categorySchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        const input = updateCategorySchema.parse(request.body);
-
-        return updateCategory(params.id, input);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => updateCategory(request.query.householdId, request.params.id, request.body),
   );
 
   app.delete(
@@ -155,18 +92,15 @@ export const categoryRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Categories"],
         summary: "Arquiva uma categoria",
-        params: idParamSchema,
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 204: noContentResponseSchema },
       },
     },
     async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        archiveCategory(params.id);
+      archiveCategory(request.query.householdId, request.params.id);
 
-        return reply.status(204).send();
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
+      return reply.status(204).send(null);
     },
   );
 };

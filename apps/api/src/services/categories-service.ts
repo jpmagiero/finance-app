@@ -1,4 +1,4 @@
-import type { CreateCategoryInput, UpdateCategoryInput } from "@finance/shared";
+import type { CategoryType, CreateCategoryInput, UpdateCategoryInput } from "@finance/shared";
 import { and, eq, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import { categories } from "../db/schema";
@@ -6,6 +6,8 @@ import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
 import { ensureHouseholdExists } from "./common-service";
+
+const MAX_HIERARCHY_HOPS = 100;
 
 type ListCategoriesInput = {
   householdId: string;
@@ -33,25 +35,62 @@ export function listCategories(input: ListCategoriesInput) {
     .all();
 }
 
-export function getCategory(id: string) {
-  const category = db.select().from(categories).where(eq(categories.id, id)).get();
+export function getCategory(householdId: string, id: string) {
+  const category = db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.householdId, householdId)))
+    .get();
 
   if (!category) {
-    notFound("Categoria nao encontrada.");
+    notFound("Categoria nao encontrada nesta casa.");
   }
 
   return category;
 }
 
-function ensureParentCategory(parentId: string, householdId: string, currentCategoryId?: string) {
+// Valida o pai efetivo de uma categoria: existencia na casa, auto-referencia,
+// compatibilidade de tipo e ausencia de ciclo na hierarquia.
+function ensureParentCategory(
+  householdId: string,
+  parentId: string,
+  effectiveType: CategoryType,
+  currentCategoryId?: string,
+) {
   if (currentCategoryId && parentId === currentCategoryId) {
     badRequest("Categoria nao pode ser pai dela mesma.");
   }
 
-  const parent = getCategory(parentId);
+  const parent = db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, parentId), eq(categories.householdId, householdId)))
+    .get();
 
-  if (parent.householdId !== householdId) {
+  if (!parent) {
     notFound("Categoria pai nao encontrada nesta casa.");
+  }
+
+  if (parent.type !== effectiveType) {
+    badRequest("Categoria pai deve ter o mesmo tipo da categoria.");
+  }
+
+  if (currentCategoryId) {
+    let ancestorId = parent.parentId;
+
+    for (let hop = 0; ancestorId && hop < MAX_HIERARCHY_HOPS; hop += 1) {
+      if (ancestorId === currentCategoryId) {
+        badRequest("Hierarquia de categorias nao pode formar ciclo.");
+      }
+
+      const ancestor = db
+        .select({ parentId: categories.parentId })
+        .from(categories)
+        .where(and(eq(categories.id, ancestorId), eq(categories.householdId, householdId)))
+        .get();
+
+      ancestorId = ancestor ? ancestor.parentId : null;
+    }
   }
 
   return parent;
@@ -61,7 +100,7 @@ export function createCategory(input: CreateCategoryInput) {
   ensureHouseholdExists(input.householdId);
 
   if (input.parentId) {
-    ensureParentCategory(input.parentId, input.householdId);
+    ensureParentCategory(input.householdId, input.parentId, input.type);
   }
 
   const id = createId();
@@ -78,25 +117,26 @@ export function createCategory(input: CreateCategoryInput) {
     })
     .run();
 
-  return getCategory(id);
+  return getCategory(input.householdId, id);
 }
 
-export function updateCategory(id: string, input: UpdateCategoryInput) {
-  const category = getCategory(id);
+export function updateCategory(householdId: string, id: string, input: UpdateCategoryInput) {
+  const category = getCategory(householdId, id);
 
-  if (input.parentId) {
-    const parent = ensureParentCategory(input.parentId, category.householdId, id);
+  // Pai e tipo EFETIVOS: mesmo quando so um dos dois muda, a combinacao final
+  // precisa continuar valida (null em parentId significa limpar o pai).
+  const parentId = input.parentId === undefined ? category.parentId : input.parentId;
+  const type = input.type ?? category.type;
 
-    if (input.type && parent.type !== input.type) {
-      badRequest("Categoria pai deve ter o mesmo tipo da categoria.");
-    }
+  if (parentId) {
+    ensureParentCategory(householdId, parentId, type, id);
   }
 
   db.update(categories)
     .set({
-      parentId: input.parentId === undefined ? category.parentId : input.parentId,
+      parentId,
       name: input.name ?? category.name,
-      type: input.type ?? category.type,
+      type,
       color: input.color === undefined ? category.color : input.color,
       icon: input.icon === undefined ? category.icon : input.icon,
       updatedAt: now(),
@@ -104,11 +144,11 @@ export function updateCategory(id: string, input: UpdateCategoryInput) {
     .where(eq(categories.id, id))
     .run();
 
-  return getCategory(id);
+  return getCategory(householdId, id);
 }
 
-export function archiveCategory(id: string) {
-  getCategory(id);
+export function archiveCategory(householdId: string, id: string) {
+  getCategory(householdId, id);
 
   db.update(categories)
     .set({

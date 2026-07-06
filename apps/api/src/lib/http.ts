@@ -1,35 +1,54 @@
-import type { FastifyReply } from "fastify";
-import { ZodError } from "zod";
+export class HttpError extends Error {
+  readonly statusCode: number;
+  readonly code: string;
 
-export function handleRouteError(reply: FastifyReply, error: unknown) {
-  if (error instanceof ZodError) {
-    return reply.status(400).send({
-      error: "validation_error",
-      issues: error.issues,
-    });
+  constructor(statusCode: number, code: string, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.statusCode = statusCode;
+    this.code = code;
   }
-
-  if (error instanceof Error && error.message.startsWith("not_found:")) {
-    return reply.status(404).send({
-      error: "not_found",
-      message: error.message.replace("not_found:", ""),
-    });
-  }
-
-  if (error instanceof Error && error.message.startsWith("bad_request:")) {
-    return reply.status(400).send({
-      error: "bad_request",
-      message: error.message.replace("bad_request:", ""),
-    });
-  }
-
-  throw error;
 }
 
-export function notFound(message: string): never {
-  throw new Error(`not_found:${message}`);
+export class BadRequestError extends HttpError {
+  constructor(message: string) {
+    super(400, "bad_request", message);
+    this.name = "BadRequestError";
+  }
+}
+
+export class NotFoundError extends HttpError {
+  constructor(message: string) {
+    super(404, "not_found", message);
+    this.name = "NotFoundError";
+  }
+}
+
+export class ConflictError extends HttpError {
+  constructor(message: string) {
+    super(409, "conflict", message);
+    this.name = "ConflictError";
+  }
 }
 
 export function badRequest(message: string): never {
-  throw new Error(`bad_request:${message}`);
+  throw new BadRequestError(message);
+}
+
+export function notFound(message: string): never {
+  throw new NotFoundError(message);
+}
+
+export function conflict(message: string): never {
+  throw new ConflictError(message);
+}
+
+export function isSqliteConstraintError(error: unknown, prefix = "SQLITE_CONSTRAINT"): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    ((error as { code: string }).code === prefix ||
+      (error as { code: string }).code.startsWith(`${prefix}_`))
+  );
 }

@@ -1,13 +1,12 @@
-import { createPayeeSchema, updatePayeeSchema } from "@finance/shared";
+import { createPayeeSchema, payeeSchema, updatePayeeSchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  genericArrayResponseSchema,
-  genericObjectResponseSchema,
-  householdIdQuerySchema,
-  idParamSchema,
-} from "../lib/docs";
-import { handleRouteError } from "../lib/http";
+  householdQuerySchema,
+  idParamsSchema,
+  noContentResponseSchema,
+} from "../lib/route-schemas";
 import {
   createPayee,
   deletePayee,
@@ -16,50 +15,20 @@ import {
   updatePayee,
 } from "../services/payees-service";
 
-const listPayeesQuerySchema = z.object({
-  householdId: z.string().min(1),
-});
+export const payeeRoutes: FastifyPluginAsync = async (rawApp) => {
+  const app = rawApp.withTypeProvider<ZodTypeProvider>();
 
-const idParamsSchema = z.object({
-  id: z.string().min(1),
-});
-
-const payeeBodySchema = {
-  type: "object",
-  required: ["householdId", "name"],
-  properties: {
-    householdId: { type: "string" },
-    name: { type: "string", minLength: 1, maxLength: 160 },
-  },
-} as const;
-
-const updatePayeeBodySchema = {
-  type: "object",
-  properties: {
-    name: { type: "string", minLength: 1, maxLength: 160 },
-  },
-} as const;
-
-export const payeeRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/",
     {
       schema: {
         tags: ["Payees"],
         summary: "Lista favorecidos e pagadores",
-        querystring: householdIdQuerySchema,
-        response: { 200: genericArrayResponseSchema },
+        querystring: householdQuerySchema,
+        response: { 200: z.array(payeeSchema) },
       },
     },
-    async (request, reply) => {
-      try {
-        const query = listPayeesQuerySchema.parse(request.query);
-
-        return listPayees(query.householdId);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => listPayees(request.query.householdId),
   );
 
   app.get(
@@ -68,19 +37,12 @@ export const payeeRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Payees"],
         summary: "Busca um favorecido ou pagador",
-        params: idParamSchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 200: payeeSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-
-        return getPayee(params.id);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => getPayee(request.query.householdId, request.params.id),
   );
 
   app.post(
@@ -89,19 +51,11 @@ export const payeeRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Payees"],
         summary: "Cria um favorecido ou pagador",
-        body: payeeBodySchema,
-        response: { 201: genericObjectResponseSchema },
+        body: createPayeeSchema,
+        response: { 201: payeeSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const input = createPayeeSchema.parse(request.body);
-
-        return reply.status(201).send(createPayee(input));
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request, reply) => reply.status(201).send(createPayee(request.body)),
   );
 
   app.put(
@@ -110,21 +64,13 @@ export const payeeRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Payees"],
         summary: "Atualiza um favorecido ou pagador",
-        params: idParamSchema,
-        body: updatePayeeBodySchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        body: updatePayeeSchema,
+        response: { 200: payeeSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        const input = updatePayeeSchema.parse(request.body);
-
-        return updatePayee(params.id, input);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => updatePayee(request.query.householdId, request.params.id, request.body),
   );
 
   app.delete(
@@ -133,18 +79,15 @@ export const payeeRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Payees"],
         summary: "Exclui um favorecido ou pagador se nao estiver em uso",
-        params: idParamSchema,
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 204: noContentResponseSchema },
       },
     },
     async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        deletePayee(params.id);
+      deletePayee(request.query.householdId, request.params.id);
 
-        return reply.status(204).send();
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
+      return reply.status(204).send(null);
     },
   );
 };

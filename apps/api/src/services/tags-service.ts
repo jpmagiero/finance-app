@@ -1,7 +1,7 @@
 import type { CreateTagInput, UpdateTagInput } from "@finance/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { tags, transactionTags } from "../db/schema";
+import { tags, transactions, transactionTags } from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -13,11 +13,15 @@ export function listTags(householdId: string) {
   return db.select().from(tags).where(eq(tags.householdId, householdId)).all();
 }
 
-export function getTag(id: string) {
-  const tag = db.select().from(tags).where(eq(tags.id, id)).get();
+export function getTag(householdId: string, id: string) {
+  const tag = db
+    .select()
+    .from(tags)
+    .where(and(eq(tags.id, id), eq(tags.householdId, householdId)))
+    .get();
 
   if (!tag) {
-    notFound("Tag nao encontrada.");
+    notFound("Tag nao encontrada nesta casa.");
   }
 
   return tag;
@@ -37,11 +41,11 @@ export function createTag(input: CreateTagInput) {
     })
     .run();
 
-  return getTag(id);
+  return getTag(input.householdId, id);
 }
 
-export function updateTag(id: string, input: UpdateTagInput) {
-  const tag = getTag(id);
+export function updateTag(householdId: string, id: string, input: UpdateTagInput) {
+  const tag = getTag(householdId, id);
 
   db.update(tags)
     .set({
@@ -52,16 +56,17 @@ export function updateTag(id: string, input: UpdateTagInput) {
     .where(eq(tags.id, id))
     .run();
 
-  return getTag(id);
+  return getTag(householdId, id);
 }
 
-export function deleteTag(id: string) {
-  getTag(id);
+export function deleteTag(householdId: string, id: string) {
+  getTag(householdId, id);
 
   const usage = db
     .select({ transactionId: transactionTags.transactionId })
     .from(transactionTags)
-    .where(eq(transactionTags.tagId, id))
+    .innerJoin(transactions, eq(transactionTags.transactionId, transactions.id))
+    .where(and(eq(transactionTags.tagId, id), isNull(transactions.deletedAt)))
     .get();
 
   if (usage) {

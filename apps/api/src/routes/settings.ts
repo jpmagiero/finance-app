@@ -1,45 +1,23 @@
-import { updateSettingsSchema } from "@finance/shared";
+import { settingsSchema, updateSettingsSchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
-import { z } from "zod";
-import { genericObjectResponseSchema, householdIdParamSchema } from "../lib/docs";
-import { handleRouteError } from "../lib/http";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { householdParamsSchema } from "../lib/route-schemas";
 import { getSettings, upsertSettings } from "../services/settings-service";
 
-const settingsParamsSchema = z.object({
-  householdId: z.string().min(1),
-});
+export const settingsRoutes: FastifyPluginAsync = async (rawApp) => {
+  const app = rawApp.withTypeProvider<ZodTypeProvider>();
 
-const settingsBodySchema = {
-  type: "object",
-  properties: {
-    currency: { type: "string", minLength: 3, maxLength: 3 },
-    timezone: { type: "string", minLength: 1, maxLength: 80 },
-    locale: { type: "string", minLength: 2, maxLength: 20 },
-    monthlyPeriodStartDay: { type: "integer", minimum: 1, maximum: 28 },
-    includePendingInReports: { type: "boolean" },
-  },
-} as const;
-
-export const settingsRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/:householdId",
     {
       schema: {
         tags: ["Settings"],
         summary: "Retorna configuracoes de uma casa",
-        params: householdIdParamSchema,
-        response: { 200: genericObjectResponseSchema },
+        params: householdParamsSchema,
+        response: { 200: settingsSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = settingsParamsSchema.parse(request.params);
-
-        return getSettings(params.householdId);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => getSettings(request.params.householdId),
   );
 
   app.put(
@@ -48,20 +26,11 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Settings"],
         summary: "Atualiza configuracoes de uma casa",
-        params: householdIdParamSchema,
-        body: settingsBodySchema,
-        response: { 200: genericObjectResponseSchema },
+        params: householdParamsSchema,
+        body: updateSettingsSchema,
+        response: { 200: settingsSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = settingsParamsSchema.parse(request.params);
-        const input = updateSettingsSchema.parse(request.body);
-
-        return upsertSettings(params.householdId, input);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => upsertSettings(request.params.householdId, request.body),
   );
 };

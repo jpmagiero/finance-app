@@ -2,6 +2,7 @@ import type { CreateAccountInput, UpdateAccountInput } from "@finance/shared";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "../db";
 import { accounts, transactions } from "../db/schema";
+import { balanceDeltas } from "../lib/balance";
 import { notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -28,11 +29,15 @@ export function listAccounts(input: ListAccountsInput) {
     .all();
 }
 
-export function getAccount(id: string) {
-  const account = db.select().from(accounts).where(eq(accounts.id, id)).get();
+export function getAccount(householdId: string, id: string) {
+  const account = db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.householdId, householdId)))
+    .get();
 
   if (!account) {
-    notFound("Conta nao encontrada.");
+    notFound("Conta nao encontrada nesta casa.");
   }
 
   return account;
@@ -46,7 +51,6 @@ export function createAccount(input: CreateAccountInput) {
   }
 
   const id = createId();
-  const initialBalanceCents = input.initialBalanceCents;
 
   db.insert(accounts)
     .values({
@@ -57,8 +61,9 @@ export function createAccount(input: CreateAccountInput) {
       type: input.type,
       institution: input.institution ?? null,
       currency: input.currency,
-      initialBalanceCents,
-      currentBalanceCents: input.currentBalanceCents ?? initialBalanceCents,
+      initialBalanceCents: input.initialBalanceCents,
+      // Conta nova nao tem transacoes: o saldo atual e o proprio saldo inicial.
+      currentBalanceCents: input.initialBalanceCents,
       creditLimitCents: input.creditLimitCents ?? null,
       statementClosingDay: input.statementClosingDay ?? null,
       statementDueDay: input.statementDueDay ?? null,
@@ -66,44 +71,51 @@ export function createAccount(input: CreateAccountInput) {
     })
     .run();
 
-  return getAccount(id);
+  return getAccount(input.householdId, id);
 }
 
-export function updateAccount(id: string, input: UpdateAccountInput) {
-  const account = getAccount(id);
+export function updateAccount(householdId: string, id: string, input: UpdateAccountInput) {
+  const account = getAccount(householdId, id);
 
   if (input.personId) {
-    ensurePersonBelongsToHousehold(input.personId, account.householdId);
+    ensurePersonBelongsToHousehold(input.personId, householdId);
   }
 
-  db.update(accounts)
-    .set({
-      personId: input.personId === undefined ? account.personId : input.personId,
-      name: input.name ?? account.name,
-      type: input.type ?? account.type,
-      institution: input.institution === undefined ? account.institution : input.institution,
-      currency: input.currency ?? account.currency,
-      initialBalanceCents: input.initialBalanceCents ?? account.initialBalanceCents,
-      currentBalanceCents: input.currentBalanceCents ?? account.currentBalanceCents,
-      creditLimitCents:
-        input.creditLimitCents === undefined ? account.creditLimitCents : input.creditLimitCents,
-      statementClosingDay:
-        input.statementClosingDay === undefined
-          ? account.statementClosingDay
-          : input.statementClosingDay,
-      statementDueDay:
-        input.statementDueDay === undefined ? account.statementDueDay : input.statementDueDay,
-      isShared: input.isShared ?? account.isShared,
-      updatedAt: now(),
-    })
-    .where(eq(accounts.id, id))
-    .run();
+  const initialBalanceCents = input.initialBalanceCents ?? account.initialBalanceCents;
+  // Saldo e derivado: mover o saldo inicial desloca o saldo atual pela mesma
+  // diferenca, mantendo a consistencia sem recalculo completo.
+  const balanceShiftCents = initialBalanceCents - account.initialBalanceCents;
 
-  return getAccount(id);
+  db.transaction(() => {
+    db.update(accounts)
+      .set({
+        personId: input.personId === undefined ? account.personId : input.personId,
+        name: input.name ?? account.name,
+        type: input.type ?? account.type,
+        institution: input.institution === undefined ? account.institution : input.institution,
+        currency: input.currency ?? account.currency,
+        initialBalanceCents,
+        currentBalanceCents: account.currentBalanceCents + balanceShiftCents,
+        creditLimitCents:
+          input.creditLimitCents === undefined ? account.creditLimitCents : input.creditLimitCents,
+        statementClosingDay:
+          input.statementClosingDay === undefined
+            ? account.statementClosingDay
+            : input.statementClosingDay,
+        statementDueDay:
+          input.statementDueDay === undefined ? account.statementDueDay : input.statementDueDay,
+        isShared: input.isShared ?? account.isShared,
+        updatedAt: now(),
+      })
+      .where(eq(accounts.id, id))
+      .run();
+  });
+
+  return getAccount(householdId, id);
 }
 
-export function archiveAccount(id: string) {
-  getAccount(id);
+export function archiveAccount(householdId: string, id: string) {
+  getAccount(householdId, id);
 
   db.update(accounts)
     .set({
@@ -114,47 +126,45 @@ export function archiveAccount(id: string) {
     .run();
 }
 
-export function recalculateAccountBalance(id: string) {
-  const account = getAccount(id);
-  const accountTransactions = db
-    .select()
-    .from(transactions)
-    .where(
-      and(
-        eq(transactions.status, "confirmed"),
-        isNull(transactions.deletedAt),
-        or(eq(transactions.accountId, id), eq(transactions.transferAccountId, id)),
-      ),
-    )
-    .all();
+export function recalculateAccountBalance(householdId: string, id: string) {
+  // Leitura do snapshot e escrita do saldo na mesma transacao (com lock de
+  // escrita imediato): sem isso, uma transacao confirmada entre o SELECT e o
+  // UPDATE por outro processo seria sobrescrita pelo valor absoluto calculado
+  // com o snapshot antigo.
+  db.transaction(
+    () => {
+      const account = getAccount(householdId, id);
 
-  const currentBalanceCents = accountTransactions.reduce((balance, transaction) => {
-    if (transaction.type === "income" && transaction.accountId === id) {
-      return balance + transaction.amountCents;
-    }
+      const accountTransactions = db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.status, "confirmed"),
+            isNull(transactions.deletedAt),
+            or(eq(transactions.accountId, id), eq(transactions.transferAccountId, id)),
+          ),
+        )
+        .all();
 
-    if (transaction.type === "expense" && transaction.accountId === id) {
-      return balance - transaction.amountCents;
-    }
+      const currentBalanceCents = accountTransactions.reduce((balance, transaction) => {
+        const accountDeltaCents = balanceDeltas(transaction)
+          .filter((delta) => delta.accountId === id)
+          .reduce((total, delta) => total + delta.deltaCents, 0);
 
-    if (transaction.type === "transfer" && transaction.accountId === id) {
-      return balance - transaction.amountCents;
-    }
+        return balance + accountDeltaCents;
+      }, account.initialBalanceCents);
 
-    if (transaction.type === "transfer" && transaction.transferAccountId === id) {
-      return balance + transaction.amountCents;
-    }
+      db.update(accounts)
+        .set({
+          currentBalanceCents,
+          updatedAt: now(),
+        })
+        .where(eq(accounts.id, id))
+        .run();
+    },
+    { behavior: "immediate" },
+  );
 
-    return balance;
-  }, account.initialBalanceCents);
-
-  db.update(accounts)
-    .set({
-      currentBalanceCents,
-      updatedAt: now(),
-    })
-    .where(eq(accounts.id, id))
-    .run();
-
-  return getAccount(id);
+  return getAccount(householdId, id);
 }

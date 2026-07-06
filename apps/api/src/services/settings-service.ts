@@ -8,6 +8,8 @@ import { now } from "../lib/normalize";
 import { ensureHouseholdExists } from "./common-service";
 
 export function getSettings(householdId: string) {
+  ensureHouseholdExists(householdId);
+
   const householdSettings = db
     .select()
     .from(settings)

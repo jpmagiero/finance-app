@@ -1,62 +1,28 @@
-import { createTagSchema, updateTagSchema } from "@finance/shared";
+import { createTagSchema, tagSchema, updateTagSchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
-  genericArrayResponseSchema,
-  genericObjectResponseSchema,
-  householdIdQuerySchema,
-  idParamSchema,
-  nullableStringProperty,
-} from "../lib/docs";
-import { handleRouteError } from "../lib/http";
+  householdQuerySchema,
+  idParamsSchema,
+  noContentResponseSchema,
+} from "../lib/route-schemas";
 import { createTag, deleteTag, getTag, listTags, updateTag } from "../services/tags-service";
 
-const listTagsQuerySchema = z.object({
-  householdId: z.string().min(1),
-});
+export const tagRoutes: FastifyPluginAsync = async (rawApp) => {
+  const app = rawApp.withTypeProvider<ZodTypeProvider>();
 
-const idParamsSchema = z.object({
-  id: z.string().min(1),
-});
-
-const tagBodySchema = {
-  type: "object",
-  required: ["householdId", "name"],
-  properties: {
-    householdId: { type: "string" },
-    name: { type: "string", minLength: 1, maxLength: 80 },
-    color: nullableStringProperty,
-  },
-} as const;
-
-const updateTagBodySchema = {
-  type: "object",
-  properties: {
-    name: { type: "string", minLength: 1, maxLength: 80 },
-    color: nullableStringProperty,
-  },
-} as const;
-
-export const tagRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     "/",
     {
       schema: {
         tags: ["Tags"],
         summary: "Lista tags de uma casa",
-        querystring: householdIdQuerySchema,
-        response: { 200: genericArrayResponseSchema },
+        querystring: householdQuerySchema,
+        response: { 200: z.array(tagSchema) },
       },
     },
-    async (request, reply) => {
-      try {
-        const query = listTagsQuerySchema.parse(request.query);
-
-        return listTags(query.householdId);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => listTags(request.query.householdId),
   );
 
   app.get(
@@ -65,19 +31,12 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Tags"],
         summary: "Busca uma tag",
-        params: idParamSchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 200: tagSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-
-        return getTag(params.id);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => getTag(request.query.householdId, request.params.id),
   );
 
   app.post(
@@ -86,19 +45,11 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Tags"],
         summary: "Cria uma tag",
-        body: tagBodySchema,
-        response: { 201: genericObjectResponseSchema },
+        body: createTagSchema,
+        response: { 201: tagSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const input = createTagSchema.parse(request.body);
-
-        return reply.status(201).send(createTag(input));
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request, reply) => reply.status(201).send(createTag(request.body)),
   );
 
   app.put(
@@ -107,21 +58,13 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Tags"],
         summary: "Atualiza uma tag",
-        params: idParamSchema,
-        body: updateTagBodySchema,
-        response: { 200: genericObjectResponseSchema },
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        body: updateTagSchema,
+        response: { 200: tagSchema },
       },
     },
-    async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        const input = updateTagSchema.parse(request.body);
-
-        return updateTag(params.id, input);
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
-    },
+    async (request) => updateTag(request.query.householdId, request.params.id, request.body),
   );
 
   app.delete(
@@ -130,18 +73,15 @@ export const tagRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Tags"],
         summary: "Exclui uma tag se nao estiver em uso",
-        params: idParamSchema,
+        params: idParamsSchema,
+        querystring: householdQuerySchema,
+        response: { 204: noContentResponseSchema },
       },
     },
     async (request, reply) => {
-      try {
-        const params = idParamsSchema.parse(request.params);
-        deleteTag(params.id);
+      deleteTag(request.query.householdId, request.params.id);
 
-        return reply.status(204).send();
-      } catch (error) {
-        return handleRouteError(reply, error);
-      }
+      return reply.status(204).send(null);
     },
   );
 };
