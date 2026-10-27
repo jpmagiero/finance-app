@@ -5,15 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc --noEmit",
+    "build": "tsc --noEmit && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "node --import tsx --test src/tests/*.test.ts",
+    "auth:provision": "tsx src/db/provision-user.ts",
+    "start": "node dist/index.js",
+    "db:migrate:prod": "node dist/db/migrate.js",
+    "db:seed:prod": "node dist/db/seed.js",
+    "auth:provision:prod": "node dist/db/provision-user.js",
+    "db:backup": "tsx src/db/backup.ts",
+    "db:restore": "tsx src/db/restore.ts",
+    "db:backup:prod": "node dist/db/backup.js",
+    "db:restore:prod": "node dist/db/restore.js"
   },
   "dependencies": {
+    "@fastify/cookie": "^11",
     "@fastify/cors": "^10.0.1",
+    "@fastify/rate-limit": "^10",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@finance/shared": "workspace:*",
@@ -27,7 +39,12 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.19",
     "drizzle-kit": "^0.31.1",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
-  }
+  },
+  "files": [
+    "dist",
+    "drizzle"
+  ]
 }

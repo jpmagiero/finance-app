@@ -3,6 +3,14 @@
 Execute os comandos na raiz do clone, salvo indicacao contraria.
 Nao dependa do caminho `/home/john/Projects/finance-app` em outras maquinas.
 
+## Acesso e frontend (entrega atual)
+
+A API agora exige login. Depois de instalar e aplicar migrations, execute
+auth:provision em terminal interativo para definir o primeiro acesso.
+A interface usa /api no mesmo origin, com proxy Vite para a API.
+Consulte [acesso e interface](acesso-e-interface.md) para comandos, permissoes
+e configuracao LAN/VPN. As secoes historicas abaixo foram ajustadas no essencial.
+
 ## Runtime e dependencias
 
 Referencia atual: Node 22 e pnpm 9.15.4. `.node-version` contem `22`;
@@ -24,9 +32,13 @@ pnpm --version
 Se Corepack nao estiver disponivel na instalacao do Node, uma alternativa e
 `npm install --global pnpm@9.15.4`. Nao e necessario executar as duas formas.
 
-Correcao de uma orientacao anterior do chat: nvm normalmente usa `.nvmrc`, nao
-`.node-version`. Este repositorio nao tem `.nvmrc`; portanto usar `nvm use 22`
-explicitamente. Ferramentas compativeis podem ler `.node-version`.
+O repositorio tem `.nvmrc` e `.node-version` com 22. Dentro do clone, nvm pode
+selecionar essa major com `nvm install` e `nvm use`. Ferramentas compativeis
+tambem podem ler `.node-version`.
+
+No Windows com clone em `\\wsl.localhost\Ubuntu\...`, executar os comandos
+dentro do WSL, nao pelo wrapper pnpm.cmd do Windows (CMD nao preserva cwd UNC).
+Em automacao: `wsl -d Ubuntu -- bash -lc` com cwd Linux e nvm carregado.
 
 Em shells de automacao com nvm instalado mas fora do PATH:
 
@@ -51,7 +63,8 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 pnpm db:migrate
 pnpm db:seed
-pnpm dev:api
+pnpm auth:provision
+pnpm dev
 ```
 
 Copiar exemplos apenas quando os `.env` ainda nao existem. O `.env` do web e
@@ -70,11 +83,14 @@ Arquivo `apps/api/.env`, carregado por dotenv:
 | HOST | 0.0.0.0 | Interface do servidor; usar 127.0.0.1 para limitar a maquina local |
 | PORT | 3333 | Porta HTTP |
 | DATABASE_URL | file:./data/app.sqlite | Caminho do SQLite |
+| COOKIE_SECURE | false | true ao servir HTTPS |
+| WEB_ORIGIN | sem default | Origin autorizado; Compose define https://APP_HOST |
+| OPENAPI_SERVER_URL | / | Prefixo da API no Swagger; /api no Compose |
 | SEED_USER_NAME | Admin | Nome inicial |
 | SEED_USER_EMAIL | admin@local | Email inicial, nao credencial de login |
 | SEED_HOUSEHOLD_NAME | Casa | Nome da casa inicial |
 
-Arquivo `apps/web/.env`: `VITE_API_URL=http://localhost:3333`.
+Arquivo apps/web/.env: API_PROXY_TARGET=http://127.0.0.1:3333 (proxy Vite).
 Variaveis VITE sao publicas no bundle; nao armazenar segredos nelas.
 
 Os scripts pnpm filtrados executam com cwd em `apps/api`. O caminho relativo do
@@ -110,15 +126,20 @@ pode criar novos registros ou associacoes. Nao usar como mecanismo de convite.
 | pnpm check:fix | Biome aplicando correcoes |
 | pnpm lint / pnpm format | Lint / formatacao com escrita no segundo |
 | pnpm typecheck | TypeScript nos workspaces |
-| pnpm build | Typecheck em shared/API e build Vite no web |
+| pnpm test | Node Test Runner + tsx, Fastify inject e SQLite temporario |
+| pnpm build | Typecheck + bundle ESM da API e build Vite do web |
+| pnpm start:api | Node executando apps/api/dist/index.js |
+| pnpm test:e2e / pnpm test:all | Playwright isolado / suites Node e navegador |
+| pnpm db:backup / pnpm db:restore | Snapshot consistente / restauracao para arquivo novo |
 | pnpm db:generate | Gera migration a partir do schema |
 | pnpm db:migrate | Aplica migrations |
 | pnpm db:seed | Provisiona dados iniciais |
 | pnpm db:studio | Abre Drizzle Studio |
 
-Nao existe script `test`, suite automatizada, `start` de producao ou bundle
-compilado da API. `pnpm build` passar nao comprova que a API esta deployavel.
-O shared tambem exporta fontes `.ts`, detalhe a resolver no build de producao.
+A suite Node roda com `pnpm test`. Para E2E, instale Chromium e bibliotecas com
+`pnpm exec playwright install --with-deps chromium` e rode `pnpm test:e2e`.
+A configuracao inicia seus proprios servidores em 4333/4173 com SQLite descartavel.
+O build de producao inclui shared no bundle; veja [producao](producao.md).
 
 Biome usa espacos, indentacao 2, largura 100, aspas duplas e ponto e virgula.
 TypeScript usa strict, noUncheckedIndexedAccess e noImplicitOverride.
@@ -130,13 +151,21 @@ Com a API iniciada:
 ```bash
 curl --fail http://localhost:3333/health/
 curl --fail http://localhost:3333/docs/json
-curl --fail http://localhost:3333/households/current
+curl -i http://localhost:3333/households/current # 401 esperado sem cookie autenticado
 ```
 
 Use `curl --fail` ou confira explicitamente status HTTP: curl sem essa opcao
 pode terminar com sucesso mesmo recebendo 400/500.
-Em testes futuros, usar Fastify inject e banco SQLite temporario com migrations.
+A suite em `apps/api/src/tests/financial.test.ts` usa Fastify inject, cria banco
+em diretorio temporario com migrations reais e fecha/remove os bancos ao terminar.
+Define DATABASE_URL antes de importar app/db/env e nao carrega .env pessoal.
+Inclui repeticao de migrations/seed em outro banco sintetico; testes de rollback
+usam triggers que falham depois de gravacoes parciais.
 Nao criar lancamentos de teste no banco financeiro pessoal.
+
+Em 2026-10-26, ambiente WSL preparado com Node 22.23.4, pnpm 9.15.4 e
+`pnpm install --frozen-lockfile`. A instalacao e local: outro clone ainda precisa
+executar o setup. O build da API agora gera artefatos executaveis em dist.
 
 ## Banco, backup e troca de maquina
 
@@ -147,23 +176,25 @@ Para continuar apenas o desenvolvimento, gerar banco novo com migrate/seed.
 Para continuar com os mesmos dados, transferir tambem um backup consistente do
 SQLite por um canal privado e ajustar DATABASE_URL. Nao publicar o banco no Git.
 
-Um procedimento simples, ainda manual, e parar todos os processos que escrevem
-no banco, copiar o arquivo e testar a restauracao em uma copia separada.
-Se WAL for ativado futuramente, considerar os arquivos auxiliares ou usar o
-mecanismo de backup do SQLite. Nao assumir que copiar o arquivo enquanto ha
-escritas produz backup consistente. Nao existe rotina automatica implementada.
+Use pnpm db:backup: o snapshot online inclui commits no WAL e valida integridade
+e vinculos. Restore exige destino novo e nao sobrescreve o original. O Compose
+inclui agendamento e retencao. Consulte [producao](producao.md) para exportacao,
+restauracao e backup fora do servidor. Nao copie diretamente um SQLite ativo.
 
 ## Home server
 
-Persistencia de volume, backup, HTTPS, controle de acesso e processo de producao
-precisam ser implementados antes de considerar o deploy pronto.
-A API atual escuta 0.0.0.0, reflete origens no CORS e nao autentica clientes.
-Ela nao deve ser exposta publicamente como se os dados estivessem protegidos.
+Compose, volumes persistentes, backup, HTTPS e processo de producao estao
+implementados. A implantacao ainda precisa ser validada com Docker ativo no servidor.
+A API escuta 0.0.0.0 por default e exige sessao nas rotas financeiras.
+CORS fica fechado salvo WEB_ORIGIN explicito. Sessoes/CSRF nao substituem
+HTTPS, configuracao do proxy e backups antes de disponibilizar fora do ambiente
+de desenvolvimento.
 
-Swagger anuncia localhost:3333 e precisa ser ajustado para outro host/porta.
-No web, localhost se refere ao navegador do usuario; ao acessar pela rede,
-VITE_API_URL deve apontar para o servidor acessivel ou um proxy configurado.
-Docker Compose, VPN e reverse proxy continuam como propostas de operacao.
+Swagger usa OPENAPI_SERVER_URL (default /, Compose /api).
+No web, o navegador usa /api no host acessado; Vite encaminha ao backend,
+conforme API_PROXY_TARGET. Em producao, o reverse proxy precisa preservar
+esse contrato e encaminhar /api removendo o prefixo.
+Docker Compose e Caddy estao versionados; DNS/VPN sao configuracoes externas.
 
 ## Como retomar uma tarefa
 

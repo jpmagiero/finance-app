@@ -8,6 +8,7 @@ import {
   nullableStringProperty,
 } from "../lib/docs";
 import { handleRouteError } from "../lib/http";
+import { restoreResource } from "../services/archive-service";
 import {
   archiveCategory,
   createCategory,
@@ -51,6 +52,22 @@ const updateCategoryBodySchema = {
 } as const;
 
 export const categoryRoutes: FastifyPluginAsync = async (app) => {
+  app.post(
+    "/:id/restore",
+    {
+      schema: {
+        tags: ["Categories"],
+        summary: "Restaura cadastro arquivado",
+        params: idParamSchema,
+      },
+    },
+    async (request, reply) => {
+      const params = idParamsSchema.parse(request.params);
+      restoreResource("categories", params.id);
+      return reply.status(204).send();
+    },
+  );
+
   app.get(
     "/",
     {

@@ -8,6 +8,13 @@
       "when": 1779668881060,
       "tag": "0000_lazy_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793056839419,
+      "tag": "0001_gigantic_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

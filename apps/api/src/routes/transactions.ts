@@ -1,4 +1,4 @@
-import { createTransactionSchema } from "@finance/shared";
+import { createTransactionSchema, dateStringSchema } from "@finance/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
@@ -13,26 +13,30 @@ import {
   createTransaction,
   deleteTransaction,
   getTransaction,
+  listTransactionPage,
   listTransactions,
   updateTransaction,
 } from "../services/transactions-service";
 
-const listTransactionsQuerySchema = z.object({
-  householdId: z.string().min(1),
-  personId: z.string().min(1).optional(),
-  accountId: z.string().min(1).optional(),
-  type: z.enum(["income", "expense", "transfer", "adjustment"]).optional(),
-  status: z.enum(["pending", "confirmed", "canceled"]).optional(),
-  from: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  to: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
-});
+const listTransactionsQuerySchema = z
+  .object({
+    householdId: z.string().min(1),
+    personId: z.string().min(1).optional(),
+    accountId: z.string().min(1).optional(),
+    type: z.enum(["income", "expense", "transfer", "adjustment"]).optional(),
+    status: z.enum(["pending", "confirmed", "canceled"]).optional(),
+    from: dateStringSchema.optional(),
+    to: dateStringSchema.optional(),
+    page: z.coerce.number().int().min(1).max(1000000).optional(),
+    search: z.string().trim().max(180).optional(),
+    categoryId: z.string().min(1).optional(),
+    tagId: z.string().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, {
+    message: "A data inicial deve ser menor ou igual a final.",
+    path: ["to"],
+  });
 
 const idParamsSchema = z.object({
   id: z.string().min(1),
@@ -46,17 +50,17 @@ const transactionBodySchema = {
     personId: nullableStringProperty,
     accountId: nullableStringProperty,
     payeeId: nullableStringProperty,
-    type: { type: "string", enum: ["income", "expense", "transfer", "adjustment"] },
+    type: { type: "string", enum: ["income", "expense", "transfer"] },
     status: {
       type: "string",
       enum: ["pending", "confirmed", "canceled"],
       default: "confirmed",
     },
-    amountCents: { type: "integer", minimum: 1 },
+    amountCents: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
     description: nullableStringProperty,
     notes: nullableStringProperty,
     transactionDate: dateStringProperty,
-    competenceDate: nullableStringProperty,
+    competenceDate: { ...dateStringProperty, nullable: true },
     transferAccountId: nullableStringProperty,
     splits: {
       type: "array",
@@ -66,7 +70,7 @@ const transactionBodySchema = {
         required: ["amountCents"],
         properties: {
           categoryId: nullableStringProperty,
-          amountCents: { type: "integer", minimum: 1 },
+          amountCents: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
           description: nullableStringProperty,
         },
       },
@@ -86,6 +90,8 @@ export const transactionRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Transactions"],
         summary: "Lista transacoes de uma casa",
+        description:
+          "Datas validas; from <= to. page ativa resposta {items,total,page,pageSize}; sem page retorna array. Conta inclui transferencias recebidas. personId=unassigned filtra casa.",
         querystring: {
           type: "object",
           required: ["householdId"],
@@ -97,17 +103,21 @@ export const transactionRoutes: FastifyPluginAsync = async (app) => {
             status: { type: "string", enum: ["pending", "confirmed", "canceled"] },
             from: dateStringProperty,
             to: dateStringProperty,
+            page: { type: "integer", minimum: 1, maximum: 1000000 },
+            search: { type: "string", maxLength: 180 },
+            categoryId: { type: "string" },
+            tagId: { type: "string" },
             limit: { type: "integer", minimum: 1, maximum: 200, default: 50 },
           },
         },
-        response: { 200: genericArrayResponseSchema },
+        response: { 200: { anyOf: [genericArrayResponseSchema, genericObjectResponseSchema] } },
       },
     },
     async (request, reply) => {
       try {
         const query = listTransactionsQuerySchema.parse(request.query);
 
-        return listTransactions(query);
+        return query.page === undefined ? listTransactions(query) : listTransactionPage(query);
       } catch (error) {
         return handleRouteError(reply, error);
       }
@@ -149,7 +159,7 @@ export const transactionRoutes: FastifyPluginAsync = async (app) => {
       try {
         const input = createTransactionSchema.parse(request.body);
 
-        return reply.status(201).send(createTransaction(input));
+        return reply.status(201).send(createTransaction(input, request.identity.userId));
       } catch (error) {
         return handleRouteError(reply, error);
       }

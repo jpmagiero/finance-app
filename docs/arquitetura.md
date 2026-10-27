@@ -21,13 +21,25 @@ tags, receitas/despesas/transferencias, splits por categoria, settings da casa
 e dashboard mensal. Recorrencias e orcamentos foram incluidos no schema e no
 planejamento do MVP, mas suas rotas e processamento ainda precisam ser feitos.
 
-O direcionamento mais recente e finalizar a API antes de desenvolver a interface.
+A prioridade anterior foi concluir a API; a interface financeira ja esta funcional.
 Previsao de gastos e renda fica para uma etapa posterior, com base no historico,
 recorrencias, compromissos futuros e medias por categoria.
 
 Ficaram fora agora: importacoes CSV/OFX, anexos/comprovantes, rateio entre pessoas,
 convites por e-mail, auditoria detalhada, faturas completas e parcelamento avancado.
 Nao existem integracoes bancarias ou uso de IA em runtime.
+
+### Revisao da primeira entrega em 2026-10-26
+
+O usuario confirmou uma primeira entrega com lancamentos e dashboard,
+incluindo os cadastros e settings necessarios. Recorrencias e orcamentos
+passam para uma evolucao posterior, sem exigir remocao das tabelas existentes.
+A entrega de acesso e interface funcional foi concluida no bloco seguinte de
+2026-10-26; detalhes em [acesso e interface](acesso-e-interface.md).
+
+O acesso inicial sera pela rede de casa ou VPN com logins individuais.
+Autenticacao e autorizacao usam sessoes no SQLite, cookie HttpOnly e CSRF,
+com senhas scrypt. Convites continuam fora do escopo. Ver [plano atualizado](analise-e-plano-2026-10-26.md).
 
 ## Stack escolhida
 
@@ -105,11 +117,16 @@ finance-app/
 
 Fluxo principal: HTTP -> rota -> validacao -> service -> Drizzle -> SQLite.
 O pacote shared nao deve depender de Fastify, do driver SQLite ou de dados privados.
-Hoje exporta fontes TypeScript, consumidas pelo tsx e pelo Vite.
+Exporta fontes TypeScript, consumidas pelo tsx/Vite e incluidas pelo esbuild
+no bundle ESM de producao da API.
 
 Services ja existem para accounts, categories, people, payees, tags, settings,
 transactions e verificacoes comuns. Eles usam uma conexao `db` compartilhada.
-Households e dashboard ainda consultam o banco nas rotas. Nao foi criada uma
+Households e dashboard tambem possuem services. A camada de autenticacao
+confere o acesso HTTP aos recursos por casa, identidade e papel.
+Desde 2026-10-26 ha suite com Node Test Runner, tsx e Fastify inject, usando
+bancos SQLite temporarios com migrations reais. Services ainda usam db
+compartilhado; testes definem a URL antes de importar a aplicacao. Nao foi criada uma
 camada de repositories, injecao de dependencias ou microservicos.
 
 ## Identidade e acesso
@@ -118,21 +135,25 @@ camada de repositories, injecao de dependencias ou microservicos.
 `household_people` representa quem recebe a atribuicao financeira.
 
 Foram discutidos convites com token secreto e hash para evitar listar/adicionar
-qualquer usuario do banco. Para simplificar, convites e sessoes foram adiados.
+qualquer usuario do banco. Convites continuam adiados; sessoes foram implementadas para os logins individuais.
 O modelo de papeis esperado e owner/admin para administracao e member para
-operacoes financeiras, mas nao ha enforcement hoje. Viewer foi considerado e
+operacoes financeiras, com enforcement HTTP por membership/casa/papel. Viewer foi considerado e
 retirado do enum final.
 
-Autenticacao continua prevista como necessidade de produto, sem mecanismo
-escolhido/implementado. Argon2 e cookies de sessao foram sugestoes anteriores;
-JWT nao foi escolhido. Validacoes de household existentes conferem referencias,
-mas nao identificam o solicitante nem autorizam acesso.
+A entrega de 2026-10-26 adotou scrypt assincrono do Node, sessoes persistidas
+com SHA-256 do token e cookie HttpOnly/SameSite=Strict. Escritas exigem CSRF;
+login e troca de senha tem limite de tentativas. Membership e papel sao
+revalidados em cada requisicao; criacao de transacao registra a autoria do login.
+JWT e Argon2 nao foram adotados. Provisionamento inicial e recuperacao sao
+locais; novos membros podem ser criados por administradores da propria casa.
+Consulte [mecanismo e limites](acesso-e-interface.md).
 
 ## Hospedagem e operacao futura
 
-Docker Compose, volume persistente, backups, HTTPS/reverse proxy e acesso por
-VPN/Tailscale foram recomendacoes operacionais. Ainda nao existem Dockerfile,
-Compose, CI ou rotina de backup no repositorio.
+Dockerfile/Compose, volumes persistentes, Caddy com HTTPS e rotina de backup
+online/restauracao estao implementados. O bundle ESM roda sem tsx em producao.
+Veja [operacao e limites de validacao](producao.md). VPN/DNS e instalacao da CA
+sao configuracoes do operador; CI ainda nao foi implementada.
 
 O objetivo e uma aplicacao simples em um home server. Jobs e workers separados
 so devem aparecer quando recorrencias ou tarefas de fundo exigirem.

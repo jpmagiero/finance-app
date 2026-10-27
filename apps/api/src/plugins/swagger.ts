@@ -2,6 +2,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { appName } from "@finance/shared";
 import type { FastifyInstance } from "fastify";
+import { env } from "../env";
 
 export async function registerSwagger(app: FastifyInstance) {
   await app.register(swagger, {
@@ -11,13 +12,20 @@ export async function registerSwagger(app: FastifyInstance) {
         description: "API para controle financeiro familiar.",
         version: "0.1.0",
       },
+      components: {
+        securitySchemes: {
+          sessionCookie: { type: "apiKey", in: "cookie", name: "finance_session" },
+          csrfToken: { type: "apiKey", in: "header", name: "x-csrf-token" },
+        },
+      },
       servers: [
         {
-          url: "http://localhost:3333",
-          description: "Servidor local",
+          url: env.OPENAPI_SERVER_URL,
+          description: "API",
         },
       ],
       tags: [
+        { name: "Auth", description: "Login, sessao e logins da casa" },
         { name: "Health", description: "Status da API" },
         { name: "Households", description: "Casa financeira e membros" },
         { name: "People", description: "Pessoas financeiras da casa" },

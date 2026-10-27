@@ -1,7 +1,7 @@
 import type { CreateCategoryInput, UpdateCategoryInput } from "@finance/shared";
 import { and, eq, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { categories } from "../db/schema";
+import { categories, transactionSplits } from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -43,25 +43,31 @@ export function getCategory(id: string) {
   return category;
 }
 
-function ensureParentCategory(parentId: string, householdId: string, currentCategoryId?: string) {
-  if (currentCategoryId && parentId === currentCategoryId) {
-    badRequest("Categoria nao pode ser pai dela mesma.");
+function ensureParentCategory(
+  parentId: string,
+  householdId: string,
+  type: string,
+  currentCategoryId?: string,
+) {
+  const visited = new Set<string>();
+  let cursor: string | null = parentId;
+  while (cursor) {
+    if (cursor === currentCategoryId || visited.has(cursor))
+      badRequest("Hierarquia de categorias nao pode ter ciclos.");
+    visited.add(cursor);
+    const parent = getCategory(cursor);
+    if (parent.householdId !== householdId) notFound("Categoria pai nao encontrada nesta casa.");
+    if (parent.type !== type) badRequest("Categoria pai deve ter o mesmo tipo.");
+    if (parent.isArchived) badRequest("Categoria pai esta arquivada.");
+    cursor = parent.parentId;
   }
-
-  const parent = getCategory(parentId);
-
-  if (parent.householdId !== householdId) {
-    notFound("Categoria pai nao encontrada nesta casa.");
-  }
-
-  return parent;
 }
 
 export function createCategory(input: CreateCategoryInput) {
   ensureHouseholdExists(input.householdId);
 
   if (input.parentId) {
-    ensureParentCategory(input.parentId, input.householdId);
+    ensureParentCategory(input.parentId, input.householdId, input.type);
   }
 
   const id = createId();
@@ -84,12 +90,22 @@ export function createCategory(input: CreateCategoryInput) {
 export function updateCategory(id: string, input: UpdateCategoryInput) {
   const category = getCategory(id);
 
-  if (input.parentId) {
-    const parent = ensureParentCategory(input.parentId, category.householdId, id);
-
-    if (input.type && parent.type !== input.type) {
-      badRequest("Categoria pai deve ter o mesmo tipo da categoria.");
-    }
+  const type = input.type ?? category.type;
+  const parentId = input.parentId === undefined ? category.parentId : input.parentId;
+  if (parentId && (input.parentId !== undefined || type !== category.type))
+    ensureParentCategory(parentId, category.householdId, type, id);
+  if (type !== category.type) {
+    if (db.select().from(transactionSplits).where(eq(transactionSplits.categoryId, id)).get())
+      badRequest("Tipo de categoria com historico nao pode mudar.");
+    if (
+      db
+        .select()
+        .from(categories)
+        .where(eq(categories.parentId, id))
+        .all()
+        .some((child) => child.type !== type)
+    )
+      badRequest("Tipo incompativel com as categorias filhas.");
   }
 
   db.update(categories)

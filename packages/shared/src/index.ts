@@ -28,10 +28,17 @@ export type RecurringFrequency = (typeof recurringFrequencies)[number];
 export type BudgetPeriod = (typeof budgetPeriods)[number];
 
 export const idSchema = z.string().min(1);
-export const moneyCentsSchema = z.number().int().nonnegative();
-export const positiveMoneyCentsSchema = z.number().int().positive();
-export const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-export const monthStringSchema = z.string().regex(/^\d{4}-\d{2}$/);
+export const signedMoneyCentsSchema = z.number().int().safe();
+export const moneyCentsSchema = signedMoneyCentsSchema.nonnegative();
+export const positiveMoneyCentsSchema = signedMoneyCentsSchema.positive();
+export const dateStringSchema = z
+  .string()
+  .regex(/^(?!0000)\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, "Data de calendario invalida.");
+export const monthStringSchema = z.string().regex(/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/);
 
 const optionalIdSchema = idSchema.nullable().optional();
 
@@ -61,9 +68,9 @@ export const createAccountSchema = z.object({
   type: z.enum(accountTypes),
   institution: z.string().trim().max(120).nullable().optional(),
   currency: z.string().trim().length(3).default("BRL"),
-  initialBalanceCents: z.number().int().default(0),
-  currentBalanceCents: z.number().int().optional(),
-  creditLimitCents: z.number().int().nonnegative().nullable().optional(),
+  initialBalanceCents: signedMoneyCentsSchema.default(0),
+  currentBalanceCents: z.never().optional(),
+  creditLimitCents: moneyCentsSchema.nullable().optional(),
   statementClosingDay: z.number().int().min(1).max(31).nullable().optional(),
   statementDueDay: z.number().int().min(1).max(31).nullable().optional(),
   isShared: z.boolean().default(false),
@@ -72,7 +79,20 @@ export const updateAccountSchema = createAccountSchema.omit({ householdId: true 
 
 export const updateSettingsSchema = z.object({
   currency: z.string().trim().length(3).optional(),
-  timezone: z.string().trim().min(1).max(80).optional(),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .refine((value) => {
+      try {
+        new Intl.DateTimeFormat("pt-BR", { timeZone: value });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Fuso horario invalido.")
+    .optional(),
   locale: z.string().trim().min(2).max(20).optional(),
   monthlyPeriodStartDay: z.number().int().min(1).max(28).optional(),
   includePendingInReports: z.boolean().optional(),
@@ -117,13 +137,34 @@ const transactionPayloadSchema = z
     tagIds: z.array(idSchema).default([]),
   })
   .superRefine((value, context) => {
-    const splitTotal = value.splits.reduce((total, split) => total + split.amountCents, 0);
+    const safeAmounts =
+      Number.isSafeInteger(value.amountCents) &&
+      value.splits.every((split) => Number.isSafeInteger(split.amountCents));
+    const splitTotal = safeAmounts
+      ? value.splits.reduce((total, split) => total + BigInt(split.amountCents), 0n)
+      : null;
 
-    if (splitTotal !== value.amountCents) {
+    if (splitTotal === null || splitTotal !== BigInt(value.amountCents)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "A soma dos splits deve ser igual ao valor total da transacao.",
         path: ["splits"],
+      });
+    }
+
+    if (value.type === "adjustment") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Ajustes ainda nao estao disponiveis.",
+        path: ["type"],
+      });
+    }
+
+    if (value.type !== "transfer" && value.transferAccountId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Apenas transferencias podem ter conta de destino.",
+        path: ["transferAccountId"],
       });
     }
 
@@ -164,3 +205,30 @@ export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;
 export type CreatePayeeInput = z.infer<typeof createPayeeSchema>;
 export type UpdatePayeeInput = z.infer<typeof updatePayeeSchema>;
+
+export const loginSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3)
+    .max(254)
+    .refine((value) => value.includes("@"), "E-mail invalido."),
+  password: z.string().min(1).max(128),
+});
+export const newLoginSchema = loginSchema.extend({
+  name: z.string().trim().min(1).max(120),
+  password: z.string().min(12).max(128),
+  personId: idSchema.optional(),
+});
+export type AuthSession = {
+  user: { id: string; name: string; email: string };
+  householdId: string;
+  role: MemberRole;
+  csrfToken: string;
+};
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(12).max(128),
+});

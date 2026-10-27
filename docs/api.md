@@ -1,9 +1,30 @@
 # API atual
 
-Contrato verificado no codigo-base `5bbbb44`, em 2026-10-20.
+Contrato-base `5bbbb44` (2026-10-20), atualizado em 2026-10-26 para
+confiabilidade financeira: saldo somente leitura, casa imutavel, datas reais,
+limites numericos e restricoes de ajuste/moeda.
 Base local padrao: `http://localhost:3333`. Nao existe prefixo `/api` ou versao
 no caminho. Os plugins de recursos registram a raiz em `/`; Swagger pode mostrar
 `/accounts/`, por exemplo. Os exemplos usam a forma com barra final.
+
+## Acesso (2026-10-26)
+
+Rotas financeiras exigem sessao HttpOnly e membership na casa. Escritas exigem
+x-csrf-token obtido em login ou GET /auth/me. Autoria de novas transacoes vem
+do login; o cliente nao a escolhe. As permissoes, provisionamento e configuracao
+LAN/VPN estao em [acesso e interface](acesso-e-interface.md).
+
+| Metodo | Caminho | Contrato |
+| --- | --- | --- |
+| POST | /auth/login | email/password; retorna user, householdId, role, csrfToken e cookie; 200 |
+| GET | /auth/me | Identidade da sessao; 200 ou 401 |
+| POST | /auth/logout | Revoga sessao e limpa cookie; 204 |
+| POST | /auth/password | currentPassword/newPassword; minimo 12 na nova; revoga todas as sessoes; 204 |
+| GET | /auth/users | Logins da propria casa, sem hashes; administradores recebem lista |
+| POST | /auth/users | name/email/password e personId opcional; cria membro na casa; 201 |
+
+Login tem limite de 10 tentativas/IP/minuto; troca de senha 5. Nao ha signup
+publico, convites, reset por e-mail ou selecao de outra casa na interface.
 
 ## Swagger e validacao
 
@@ -12,7 +33,7 @@ no caminho. Os plugins de recursos registram a raiz em `/`; Swagger pode mostrar
 - Registro: `apps/api/src/plugins/swagger.ts`, antes das rotas no `app.ts`.
 - `buildApp()` e async; `index.ts` aguarda sua criacao e inicia o servidor.
 - Tags agrupam Health, Households, People, Categories, Accounts, Payees, Tags,
-  Settings, Transactions e Dashboard.
+  Settings, Transactions, Dashboard e Auth.
 
 JSON Schemas nas rotas sao usados pelo Fastify/Ajv e pelo Swagger. Schemas Zod
 do shared tambem validam payloads. Nao ha geracao automatica entre os dois;
@@ -30,8 +51,8 @@ localhost:3333, mesmo se HOST/PORT forem alterados.
 | --- | --- | --- |
 | GET | `/` | Nome e status da API |
 | GET | `/health/` | Status e uptime do processo |
-| GET | `/households/current` | Primeira casa encontrada, settings, people e members |
-| GET | `/people/` | Lista por householdId, incluindo inativos |
+| GET | `/households/current` | Casa autorizada da sessao, settings, people e members |
+| GET | `/people/` | Lista por householdId; includeInactive=true inclui inativos |
 | POST | `/people/` | Cria pessoa financeira |
 | GET | `/people/:id` | Busca pessoa |
 | PUT | `/people/:id` | Atualiza parcialmente pessoa |
@@ -67,13 +88,14 @@ localhost:3333, mesmo se HOST/PORT forem alterados.
 | GET | `/dashboard/monthly` | Resumo por householdId e month |
 
 POSTs de cadastro retornam 201; demais leituras/atualizacoes retornam 200.
-Nao ha endpoints para users, membership, login, criar/editar casa, recorrencias,
-budgets, restauracao ou desarquivamento.
+Ha endpoints de logins listados acima e POST /people/:id/restore,
+/accounts/:id/restore e /categories/:id/restore (204). Nao ha CRUD completo
+de users/membership, criar/editar casa, recorrencias ou budgets.
 
-`/households/current` ainda nao significa a casa do usuario autenticado: faz
-`limit(1)` sem contexto de identidade. GET/PUT/DELETE por ID tambem nao verificam
-o acesso do solicitante. Isso e uma lacuna de autorizacao, nao uma permissao
-deliberada para acessar outras casas.
+A casa atual vem da sessao e membership, nunca de limit(1) global. Listas,
+operacoes por ID, settings, restore e recalculo verificam a casa autorizada.
+Recursos de outra casa retornam 404. Member opera lancamentos; owner/admin
+tambem administram cadastros, preferencias e novos logins.
 
 ## Parametros de consulta
 
@@ -85,31 +107,38 @@ Categories aceita `type=income|expense|transfer`.
 | --- | --- |
 | householdId | Obrigatorio |
 | personId | Filtro individual opcional |
-| accountId | Filtra somente origem; transferencias recebidas nao sao incluidas por esse filtro |
+| accountId | Filtra origem ou destino, incluindo transferencias recebidas |
 | type | income, expense, transfer, adjustment |
 | status | pending, confirmed, canceled |
 | from / to | Datas YYYY-MM-DD, limites inclusivos |
 | limit | Inteiro de 1 a 200, default 50 |
+| page | Opcional; ativa envelope items/total/page/pageSize |
+| search | Substring de descricao/notes, ate 180 caracteres |
+| categoryId / tagId | Filtram por vinculos de splits/tags |
 
-A lista ordena por transactionDate e createdAt descendentes. Nao ha cursor,
-offset, total ou paginacao completa, nem filtros categoryId/tagId/search/month.
+A lista ordena por transactionDate, createdAt e id descendentes. Sem page,
+retorna array; com page, retorna {items,total,page,pageSize}. personId=unassigned
+filtra registros sem pessoa. Filtros de data sao inclusivos; nao ha cursor.
 
 `GET /dashboard/monthly` exige `householdId` e `month=YYYY-MM`.
 Retorna `month`, `incomeCents`, `expenseCents`, `balanceCents`,
 `transactionCount` e `categories`. A configuracao includePendingInReports
-influencia status, mas o dia inicial do mes ainda nao influencia o periodo.
+influencia status e monthlyPeriodStartDay define os limites do periodo.
+Aceita personId (incluindo unassigned) e retorna from/to, flow e totais
+confirmados/pendentes separados. Categorias incluem apenas despesas, com
+category=null para sem categoria. hasMixedCurrencies sinaliza falta de cambio.
 
 ## Campos de criacao e edicao
 
 Campos opcionais de IDs podem ser nulos; ID informado precisa existir.
 Nao enviar campos calculados ou de auditoria como se fossem controlados pelo
-cliente, salvo saldo atual que a API hoje aceita explicitamente.
+cliente. Enviar `currentBalanceCents` em POST/PUT de conta retorna 400.
 
 | Recurso | Obrigatorios no POST | Outros campos aceitos |
 | --- | --- | --- |
 | people | householdId, name | userId, color, avatarUrl |
 | categories | householdId, name, type | parentId, color, icon |
-| accounts | householdId, name, type | personId, institution, currency, initialBalanceCents, currentBalanceCents, creditLimitCents, statementClosingDay, statementDueDay, isShared |
+| accounts | householdId, name, type | personId, institution, currency, initialBalanceCents, creditLimitCents, statementClosingDay, statementDueDay, isShared |
 | payees | householdId, name | Nenhum |
 | tags | householdId, name | color |
 | transactions | householdId, type, amountCents, transactionDate, splits | personId, accountId, payeeId, status, description, notes, competenceDate, transferAccountId, tagIds |
@@ -117,12 +146,22 @@ cliente, salvo saldo atual que a API hoje aceita explicitamente.
 Limites atuais: nome de pessoa/categoria/conta 120 caracteres; payee 160; tag 80;
 descricao de transacao/split 180; notes 2000; color 32; icon 80.
 Moeda exige tres caracteres; limite de credito nao negativo; dias de cartao 1 a 31.
+Dinheiro exige inteiros seguros JavaScript (+/- 9007199254740991 centavos), com
+transacoes/splits positivos. Datas e meses precisam existir no calendario, com
+anos 0001 a 9999, e filtros exigem from <= to. Overflow de saldo/agregacao
+retorna 400. Transferencias exigem contas de mesma moeda.
+
+Editar saldo inicial recalcula saldo atual atomicamente; saldo atual e somente
+leitura. Moeda de conta com historico (inclusive excluido) nao pode mudar.
+As demais regras de moedas e conversao continuam pendentes.
 
 PUT de cadastros permite omitir campos e preserva os existentes. Household nao
 e editavel nesses recursos. PUT de transacao reutiliza o schema de criacao:
 exige os campos obrigatorios e substitui splits/tags. Omitir status retorna ao
 default confirmed e omitir tagIds remove as tags, pois o default e array vazio.
-Hoje PUT de transacao tambem aceita mudar householdId, uma lacuna a corrigir.
+PUT de transacao exige a mesma householdId do registro existente; mudanca
+retorna 400 sem gravacoes. POST/PUT aceitam apenas income, expense e transfer;
+adjustment continua consultavel como historico, mas sua escrita retorna 400.
 
 ## Exemplo sem pessoa, conta ou favorecido conhecidos
 
@@ -167,11 +206,18 @@ Content-Type: application/json
 
 ## Erros atuais
 
-`lib/http.ts` traduz ZodError para 400 com `error=validation_error` e `issues`;
-erros `not_found:` para 404; erros `bad_request:` para 400 com mensagem.
-Validacoes Ajv anteriores ao handler usam o formato padrao do Fastify.
-Erros de unicidade/FK nao tratados podem virar 500.
+lib/http.ts e o error handler central traduzem validacao Zod/Ajv para 400,
+ausencia/expiracao de sessao para 401, permissao/CSRF/origin para 403,
+recurso inexistente ou de outra casa para 404, duplicidade para 409 e limite
+de tentativas para 429. Falhas inesperadas retornam 500 generico, sem SQL.
 
-Nao existe contrato unico completo de erros, 409 para conflito, autenticacao
-ou respostas 401/403 implementadas. `/health` verifica o processo, nao consulta
-explicitamente o banco nem verifica se as migrations foram aplicadas.
+Formato error/message e issues quando aplicavel. OpenAPI inclui esses erros
+e esquemas de cookie/CSRF. Algumas respostas antigas ainda sao genericas.
+Health verifica o processo, nao readiness de migrations ou persistencia.
+
+## Saude para operacao
+
+GET /health/ e liveness publico. GET /health/ready e readiness publico: 200
+quando a tabela de sessoes pode ser consultada, 503 caso contrario. Nao substitui
+validacao de integridade do banco. OPENAPI_SERVER_URL define o prefixo anunciado
+(default /; /api no Compose). Veja [producao](producao.md).

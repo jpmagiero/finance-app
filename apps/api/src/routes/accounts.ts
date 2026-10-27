@@ -18,6 +18,7 @@ import {
   recalculateAccountBalance,
   updateAccount,
 } from "../services/accounts-service";
+import { restoreResource } from "../services/archive-service";
 
 const listAccountsQuerySchema = z.object({
   householdId: z.string().min(1),
@@ -30,6 +31,7 @@ const idParamsSchema = z.object({
 
 const accountBodySchema = {
   type: "object",
+  not: { required: ["currentBalanceCents"] },
   required: ["householdId", "name", "type"],
   properties: {
     householdId: { type: "string" },
@@ -41,9 +43,18 @@ const accountBodySchema = {
     },
     institution: nullableStringProperty,
     currency: { type: "string", minLength: 3, maxLength: 3, default: "BRL" },
-    initialBalanceCents: { type: "integer", default: 0 },
-    currentBalanceCents: { type: "integer" },
-    creditLimitCents: nullableIntegerProperty,
+    initialBalanceCents: {
+      type: "integer",
+      minimum: Number.MIN_SAFE_INTEGER,
+      maximum: Number.MAX_SAFE_INTEGER,
+      default: 0,
+    },
+    creditLimitCents: {
+      type: "integer",
+      nullable: true,
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
     statementClosingDay: nullableIntegerProperty,
     statementDueDay: nullableIntegerProperty,
     isShared: { type: "boolean", default: false },
@@ -52,6 +63,7 @@ const accountBodySchema = {
 
 const updateAccountBodySchema = {
   type: "object",
+  not: { required: ["currentBalanceCents"] },
   properties: {
     personId: nullableStringProperty,
     name: { type: "string", minLength: 1, maxLength: 120 },
@@ -61,9 +73,17 @@ const updateAccountBodySchema = {
     },
     institution: nullableStringProperty,
     currency: { type: "string", minLength: 3, maxLength: 3 },
-    initialBalanceCents: { type: "integer" },
-    currentBalanceCents: { type: "integer" },
-    creditLimitCents: nullableIntegerProperty,
+    initialBalanceCents: {
+      type: "integer",
+      minimum: Number.MIN_SAFE_INTEGER,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+    creditLimitCents: {
+      type: "integer",
+      nullable: true,
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
     statementClosingDay: nullableIntegerProperty,
     statementDueDay: nullableIntegerProperty,
     isShared: { type: "boolean" },
@@ -71,6 +91,18 @@ const updateAccountBodySchema = {
 } as const;
 
 export const accountRoutes: FastifyPluginAsync = async (app) => {
+  app.post(
+    "/:id/restore",
+    {
+      schema: { tags: ["Accounts"], summary: "Restaura cadastro arquivado", params: idParamSchema },
+    },
+    async (request, reply) => {
+      const params = idParamsSchema.parse(request.params);
+      restoreResource("accounts", params.id);
+      return reply.status(204).send();
+    },
+  );
+
   app.get(
     "/",
     {
@@ -128,6 +160,7 @@ export const accountRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Accounts"],
         summary: "Cria uma conta, cartao ou carteira",
+        description: "Saldo atual e calculado pelo servidor a partir do saldo inicial.",
         body: accountBodySchema,
         response: { 201: genericObjectResponseSchema },
       },
@@ -149,6 +182,8 @@ export const accountRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         tags: ["Accounts"],
         summary: "Atualiza uma conta",
+        description:
+          "Saldo atual e somente leitura. Alterar saldo inicial recalcula o atual atomicamente. Moeda nao pode mudar quando ha historico.",
         params: idParamSchema,
         body: updateAccountBodySchema,
         response: { 200: genericObjectResponseSchema },

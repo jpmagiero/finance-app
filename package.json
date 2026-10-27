@@ -15,14 +15,23 @@
     "check:fix": "biome check --write .",
     "format": "biome format --write .",
     "lint": "biome lint .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tools.json",
     "db:generate": "pnpm --filter @finance/api db:generate",
     "db:migrate": "pnpm --filter @finance/api db:migrate",
     "db:seed": "pnpm --filter @finance/api db:seed",
-    "db:studio": "pnpm --filter @finance/api db:studio"
+    "db:studio": "pnpm --filter @finance/api db:studio",
+    "test": "pnpm --filter @finance/api test",
+    "auth:provision": "pnpm --filter @finance/api auth:provision",
+    "test:e2e": "playwright test",
+    "test:all": "pnpm test && pnpm test:e2e",
+    "start:api": "pnpm --filter @finance/api start",
+    "db:backup": "pnpm --filter @finance/api db:backup",
+    "db:restore": "pnpm --filter @finance/api db:restore"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.6",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22",
     "typescript": "^5.8.3"
   }
 }

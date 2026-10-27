@@ -9,6 +9,7 @@ import {
   nullableStringProperty,
 } from "../lib/docs";
 import { handleRouteError } from "../lib/http";
+import { restoreResource } from "../services/archive-service";
 import {
   archivePerson,
   createPerson,
@@ -19,6 +20,7 @@ import {
 
 const listPeopleQuerySchema = z.object({
   householdId: z.string().min(1),
+  includeInactive: z.enum(["true", "false"]).optional(),
 });
 
 const idParamsSchema = z.object({
@@ -48,13 +50,29 @@ const updatePersonBodySchema = {
 } as const;
 
 export const peopleRoutes: FastifyPluginAsync = async (app) => {
+  app.post(
+    "/:id/restore",
+    { schema: { tags: ["People"], summary: "Restaura cadastro arquivado", params: idParamSchema } },
+    async (request, reply) => {
+      const params = idParamsSchema.parse(request.params);
+      restoreResource("people", params.id);
+      return reply.status(204).send();
+    },
+  );
+
   app.get(
     "/",
     {
       schema: {
         tags: ["People"],
         summary: "Lista pessoas financeiras de uma casa",
-        querystring: householdIdQuerySchema,
+        querystring: {
+          ...householdIdQuerySchema,
+          properties: {
+            ...householdIdQuerySchema.properties,
+            includeInactive: { type: "string", enum: ["true", "false"] },
+          },
+        },
         response: { 200: genericArrayResponseSchema },
       },
     },
@@ -62,7 +80,7 @@ export const peopleRoutes: FastifyPluginAsync = async (app) => {
       try {
         const query = listPeopleQuerySchema.parse(request.query);
 
-        return listPeople(query.householdId);
+        return listPeople(query.householdId, query.includeInactive === "true");
       } catch (error) {
         return handleRouteError(reply, error);
       }

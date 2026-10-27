@@ -14,3 +14,12 @@ apps/api/data/*.sqlite-*
 *.log
 *.tsbuildinfo
 .DS_Store
+
+playwright-report/
+test-results/
+
+apps/api/backups/
+
+deploy/.env
+private-backups/
+finance-local-ca.crt

@@ -24,22 +24,25 @@ export const householdIdParamSchema = {
 
 export const dateStringProperty = {
   type: "string",
-  pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+  pattern: "^(?!0000)\\d{4}-\\d{2}-\\d{2}$",
+  format: "date",
 } as const;
 
 export const monthStringProperty = {
   type: "string",
-  pattern: "^\\d{4}-\\d{2}$",
+  pattern: "^(?!0000)\\d{4}-(0[1-9]|1[0-2])$",
 } as const;
 
 export const nullableStringProperty = {
-  anyOf: [{ type: "string" }, { type: "null" }],
+  type: "string",
+  nullable: true,
 } as const;
 
 export const optionalNullableStringProperty = nullableStringProperty;
 
 export const nullableIntegerProperty = {
-  anyOf: [{ type: "integer" }, { type: "null" }],
+  type: "integer",
+  nullable: true,
 } as const;
 
 export const errorResponseSchema = {

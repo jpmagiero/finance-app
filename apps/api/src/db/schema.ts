@@ -364,3 +364,23 @@ export type Account = typeof accounts.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    csrfToken: text("csrf_token").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    ...timestamps,
+  },
+  (table) => ({
+    userIdx: index("sessions_user_idx").on(table.userId),
+    expiresIdx: index("sessions_expires_idx").on(table.expiresAt),
+  }),
+);

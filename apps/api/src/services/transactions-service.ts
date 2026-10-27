@@ -1,5 +1,5 @@
-import type { CreateTransactionInput } from "@finance/shared";
-import { and, desc, eq, gte, isNull, lte, type SQL, sql } from "drizzle-orm";
+import { type CreateTransactionInput, createTransactionSchema } from "@finance/shared";
+import { and, desc, eq, gte, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   accounts,
@@ -13,6 +13,7 @@ import {
 } from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
+import { moneyAsBigInt, safeMoneyCents } from "../lib/money";
 import { now } from "../lib/normalize";
 import { ensureHouseholdExists } from "./common-service";
 
@@ -25,6 +26,10 @@ type ListTransactionsInput = {
   from?: string;
   to?: string;
   limit: number;
+  page?: number;
+  search?: string;
+  categoryId?: string;
+  tagId?: string;
 };
 
 function normalizeTransactionInput(input: CreateTransactionInput) {
@@ -41,50 +46,62 @@ function normalizeTransactionInput(input: CreateTransactionInput) {
   };
 }
 
-function updateAccountBalance(accountId: string, amountCents: number, timestamp: string) {
+function updateAccountBalance(accountId: string, amountCents: bigint, timestamp: string) {
+  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  if (!account) {
+    notFound("Conta nao encontrada.");
+  }
+  const currentBalanceCents = safeMoneyCents(
+    moneyAsBigInt(account.currentBalanceCents) + amountCents,
+  );
   db.update(accounts)
     .set({
-      currentBalanceCents: sql`${accounts.currentBalanceCents} + ${amountCents}`,
+      currentBalanceCents,
       updatedAt: timestamp,
     })
     .where(eq(accounts.id, accountId))
     .run();
 }
 
-function applyTransactionBalance(
-  transaction: {
-    type: string;
-    status: string;
-    amountCents: number;
-    accountId: string | null;
-    transferAccountId: string | null;
-  },
-  direction: 1 | -1,
+type BalanceTransaction = {
+  type: string;
+  status: string;
+  amountCents: number;
+  accountId: string | null;
+  transferAccountId: string | null;
+};
+
+function applyTransactionBalances(
+  changes: { transaction: BalanceTransaction; direction: 1 | -1 }[],
   timestamp: string,
 ) {
-  if (transaction.status !== "confirmed") {
-    return;
+  // Apply the net change per account. Reversing an old entry separately could
+  // overflow temporarily even when the final balance is representable.
+  const deltas = new Map<string, bigint>();
+  const add = (id: string, amount: bigint) => {
+    deltas.set(id, (deltas.get(id) ?? 0n) + amount);
+  };
+  for (const { transaction, direction } of changes) {
+    if (transaction.status !== "confirmed") continue;
+    const amount = moneyAsBigInt(transaction.amountCents) * BigInt(direction);
+    if (transaction.type === "income" && transaction.accountId) {
+      add(transaction.accountId, amount);
+    }
+    if (transaction.type === "expense" && transaction.accountId) {
+      add(transaction.accountId, -amount);
+    }
+    if (transaction.type === "transfer" && transaction.accountId && transaction.transferAccountId) {
+      add(transaction.accountId, -amount);
+      add(transaction.transferAccountId, amount);
+    }
   }
-
-  if (transaction.type === "income" && transaction.accountId) {
-    updateAccountBalance(transaction.accountId, transaction.amountCents * direction, timestamp);
-  }
-
-  if (transaction.type === "expense" && transaction.accountId) {
-    updateAccountBalance(transaction.accountId, -transaction.amountCents * direction, timestamp);
-  }
-
-  if (transaction.type === "transfer" && transaction.accountId && transaction.transferAccountId) {
-    updateAccountBalance(transaction.accountId, -transaction.amountCents * direction, timestamp);
-    updateAccountBalance(
-      transaction.transferAccountId,
-      transaction.amountCents * direction,
-      timestamp,
-    );
-  }
+  for (const [id, delta] of deltas) updateAccountBalance(id, delta, timestamp);
 }
 
-function ensureTransactionReferences(input: ReturnType<typeof normalizeTransactionInput>) {
+function ensureTransactionReferences(
+  input: ReturnType<typeof normalizeTransactionInput>,
+  existing?: ReturnType<typeof getTransaction>,
+) {
   ensureHouseholdExists(input.householdId);
 
   if (input.type !== "transfer" && input.transferAccountId) {
@@ -103,6 +120,14 @@ function ensureTransactionReferences(input: ReturnType<typeof normalizeTransacti
     }
   }
 
+  if (
+    input.personId &&
+    !db.select().from(householdPeople).where(eq(householdPeople.id, input.personId)).get()
+      ?.isActive &&
+    existing?.personId !== input.personId
+  )
+    badRequest("Pessoa esta inativa.");
+
   if (input.accountId) {
     const account = db.select().from(accounts).where(eq(accounts.id, input.accountId)).get();
 
@@ -110,6 +135,13 @@ function ensureTransactionReferences(input: ReturnType<typeof normalizeTransacti
       notFound("Conta de origem nao encontrada nesta casa.");
     }
   }
+
+  if (
+    input.accountId &&
+    db.select().from(accounts).where(eq(accounts.id, input.accountId)).get()?.isArchived &&
+    existing?.accountId !== input.accountId
+  )
+    badRequest("Conta de origem esta arquivada.");
 
   if (input.transferAccountId) {
     const account = db
@@ -120,6 +152,25 @@ function ensureTransactionReferences(input: ReturnType<typeof normalizeTransacti
 
     if (!account || account.householdId !== input.householdId) {
       notFound("Conta de destino nao encontrada nesta casa.");
+    }
+  }
+
+  if (
+    input.transferAccountId &&
+    db.select().from(accounts).where(eq(accounts.id, input.transferAccountId)).get()?.isArchived &&
+    existing?.transferAccountId !== input.transferAccountId
+  )
+    badRequest("Conta de destino esta arquivada.");
+
+  if (input.type === "transfer" && input.accountId && input.transferAccountId) {
+    const origin = db.select().from(accounts).where(eq(accounts.id, input.accountId)).get();
+    const destination = db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.id, input.transferAccountId))
+      .get();
+    if (origin?.currency !== destination?.currency) {
+      badRequest("Transferencias exigem contas da mesma moeda.");
     }
   }
 
@@ -142,6 +193,9 @@ function ensureTransactionReferences(input: ReturnType<typeof normalizeTransacti
       notFound("Categoria nao encontrada nesta casa.");
     }
 
+    if (category.isArchived && !existing?.splits.some((old) => old.categoryId === category.id))
+      badRequest("Categoria esta arquivada.");
+
     if (input.type !== "adjustment" && category.type !== input.type) {
       badRequest("Categoria incompativel com o tipo da transacao.");
     }
@@ -156,7 +210,7 @@ function ensureTransactionReferences(input: ReturnType<typeof normalizeTransacti
   }
 }
 
-export function listTransactions(input: ListTransactionsInput) {
+function transactionConditions(input: ListTransactionsInput) {
   ensureHouseholdExists(input.householdId);
 
   const conditions: SQL[] = [
@@ -165,11 +219,19 @@ export function listTransactions(input: ListTransactionsInput) {
   ];
 
   if (input.personId) {
-    conditions.push(eq(transactions.personId, input.personId));
+    conditions.push(
+      input.personId === "unassigned"
+        ? isNull(transactions.personId)
+        : eq(transactions.personId, input.personId),
+    );
   }
 
   if (input.accountId) {
-    conditions.push(eq(transactions.accountId, input.accountId));
+    const accountCondition = or(
+      eq(transactions.accountId, input.accountId),
+      eq(transactions.transferAccountId, input.accountId),
+    );
+    if (accountCondition) conditions.push(accountCondition);
   }
 
   if (input.type) {
@@ -188,13 +250,45 @@ export function listTransactions(input: ListTransactionsInput) {
     conditions.push(lte(transactions.transactionDate, input.to));
   }
 
+  if (input.search)
+    conditions.push(
+      sql`instr(lower(coalesce(${transactions.description}, '') || ' ' || coalesce(${transactions.notes}, '')), lower(${input.search})) > 0`,
+    );
+  if (input.categoryId)
+    conditions.push(
+      sql`exists (select 1 from transaction_splits s where s.transaction_id = ${transactions.id} and s.category_id = ${input.categoryId})`,
+    );
+  if (input.tagId)
+    conditions.push(
+      sql`exists (select 1 from transaction_tags tt where tt.transaction_id = ${transactions.id} and tt.tag_id = ${input.tagId})`,
+    );
+  return and(...conditions);
+}
+
+export function listTransactions(input: ListTransactionsInput) {
   return db
     .select()
     .from(transactions)
-    .where(and(...conditions))
-    .orderBy(desc(transactions.transactionDate), desc(transactions.createdAt))
+    .where(transactionConditions(input))
+    .orderBy(
+      desc(transactions.transactionDate),
+      desc(transactions.createdAt),
+      desc(transactions.id),
+    )
     .limit(input.limit)
+    .offset(((input.page ?? 1) - 1) * input.limit)
     .all();
+}
+
+export function listTransactionPage(input: ListTransactionsInput) {
+  const items = listTransactions(input);
+  const total =
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(transactions)
+      .where(transactionConditions(input))
+      .get()?.total ?? 0;
+  return { items, total, page: input.page ?? 1, pageSize: input.limit };
 }
 
 export function getTransaction(id: string) {
@@ -222,8 +316,8 @@ export function getTransaction(id: string) {
   };
 }
 
-export function createTransaction(input: CreateTransactionInput) {
-  const normalizedInput = normalizeTransactionInput(input);
+export function createTransaction(input: CreateTransactionInput, createdByUserId?: string) {
+  const normalizedInput = normalizeTransactionInput(createTransactionSchema.parse(input));
   ensureTransactionReferences(normalizedInput);
 
   const transactionId = createId();
@@ -233,6 +327,7 @@ export function createTransaction(input: CreateTransactionInput) {
     db.insert(transactions)
       .values({
         id: transactionId,
+        createdByUserId: createdByUserId ?? null,
         householdId: normalizedInput.householdId,
         personId: normalizedInput.personId,
         accountId: normalizedInput.accountId,
@@ -248,7 +343,7 @@ export function createTransaction(input: CreateTransactionInput) {
       })
       .run();
 
-    applyTransactionBalance(normalizedInput, 1, timestamp);
+    applyTransactionBalances([{ transaction: normalizedInput, direction: 1 }], timestamp);
 
     for (const split of normalizedInput.splits) {
       db.insert(transactionSplits)
@@ -272,13 +367,22 @@ export function createTransaction(input: CreateTransactionInput) {
 
 export function updateTransaction(id: string, input: CreateTransactionInput) {
   const existingTransaction = getTransaction(id);
-  const normalizedInput = normalizeTransactionInput(input);
-  ensureTransactionReferences(normalizedInput);
+  const normalizedInput = normalizeTransactionInput(createTransactionSchema.parse(input));
+  if (normalizedInput.householdId !== existingTransaction.householdId) {
+    badRequest("A casa da transacao nao pode ser alterada.");
+  }
+  ensureTransactionReferences(normalizedInput, existingTransaction);
 
   const timestamp = now();
 
   db.transaction(() => {
-    applyTransactionBalance(existingTransaction, -1, timestamp);
+    applyTransactionBalances(
+      [
+        { transaction: existingTransaction, direction: -1 },
+        { transaction: normalizedInput, direction: 1 },
+      ],
+      timestamp,
+    );
 
     db.update(transactions)
       .set({
@@ -317,8 +421,6 @@ export function updateTransaction(id: string, input: CreateTransactionInput) {
     for (const tagId of normalizedInput.tagIds) {
       db.insert(transactionTags).values({ transactionId: id, tagId }).run();
     }
-
-    applyTransactionBalance(normalizedInput, 1, timestamp);
   });
 
   return getTransaction(id);
@@ -337,6 +439,6 @@ export function deleteTransaction(id: string) {
       .where(eq(transactions.id, id))
       .run();
 
-    applyTransactionBalance(transaction, -1, timestamp);
+    applyTransactionBalances([{ transaction, direction: -1 }], timestamp);
   });
 }

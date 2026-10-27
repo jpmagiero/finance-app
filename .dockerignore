@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite-*
+**/backups
+playwright-report
+test-results
+.codex
+.agents
+
+private-backups

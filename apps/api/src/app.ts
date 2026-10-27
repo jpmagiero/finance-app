@@ -1,8 +1,12 @@
 import cors from "@fastify/cors";
 import { appName } from "@finance/shared";
-import Fastify from "fastify";
+import Fastify, { type FastifyServerOptions } from "fastify";
+import { env } from "./env";
+import { handleRouteError } from "./lib/http";
+import { registerAuth } from "./plugins/auth";
 import { registerSwagger } from "./plugins/swagger";
 import { accountRoutes } from "./routes/accounts";
+import { authRoutes } from "./routes/auth";
 import { categoryRoutes } from "./routes/categories";
 import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
@@ -13,15 +17,34 @@ import { settingsRoutes } from "./routes/settings";
 import { tagRoutes } from "./routes/tags";
 import { transactionRoutes } from "./routes/transactions";
 
-export async function buildApp() {
+export async function buildApp(options: FastifyServerOptions = {}) {
   const app = Fastify({
-    logger: true,
+    logger: {
+      redact: [
+        "req.headers.cookie",
+        "req.headers.authorization",
+        "req.body.password",
+        "req.body.currentPassword",
+        "req.body.newPassword",
+      ],
+    },
+    ...options,
   });
 
   await app.register(cors, {
-    origin: true,
+    origin: env.WEB_ORIGIN ?? false,
+    credentials: true,
   });
+  app.setErrorHandler((error, request, reply) => {
+    if (!(error instanceof Error)) {
+      request.log.error(error);
+      return reply.status(500).send({ error: "internal_error", message: "Erro interno." });
+    }
+    return handleRouteError(reply, error);
+  });
+  await registerAuth(app);
   await registerSwagger(app);
+  app.register(authRoutes, { prefix: "/auth" });
 
   app.register(healthRoutes, {
     prefix: "/health",
@@ -57,6 +80,7 @@ export async function buildApp() {
   app.get(
     "/",
     {
+      config: { public: true },
       schema: {
         tags: ["Health"],
         summary: "Informacoes basicas da API",

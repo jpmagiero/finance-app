@@ -1,5 +1,7 @@
 # Banco de dados
 
+Atualizacao 2026-10-26: 16 tabelas; migration 0001 adiciona sessions.
+
 Inventario do schema em `apps/api/src/db/schema.ts`, referencia `5bbbb44`.
 A migration inicial esta em `apps/api/drizzle/0000_lazy_mantis.sql`, com snapshot
 e journal em `drizzle/meta`. Esses arquivos fazem parte do Git.
@@ -29,7 +31,7 @@ nao necessariamente em constraints SQL.
 
 | Tabela | Campos de negocio | Constraints e observacoes |
 | --- | --- | --- |
-| `users` | `name`, `email`, `passwordHash?`, `avatarUrl?`, `isActive=true` | Email unico; senha nullable porque login ainda nao foi implementado |
+| `users` | `name`, `email`, `passwordHash?`, `avatarUrl?`, `isActive=true` | Email unico; nullable para usuarios legados ainda nao provisionados |
 | `households` | `name` | Nome nao e unico; representa uma casa/grupo financeiro |
 | `household_members` | `householdId`, `userId`, `role` | Par casa/usuario unico; role: owner, admin, member |
 | `household_people` | `householdId`, `userId?`, `name`, `color?`, `avatarUrl?`, `isActive=true` | Vinculo opcional com login; nao ha unique de casa/usuario nem exigencia SQL de membership |
@@ -37,8 +39,16 @@ nao necessariamente em constraints SQL.
 
 `household_members` controla o modelo de acesso futuro; `household_people`
 controla a atribuicao de receitas/despesas. Criar uma pessoa financeira nao
-deveria conceder acesso. Os endpoints atuais de people aceitam `userId`, mas
-so verificam existencia do usuario; o fluxo seguro de vinculacao esta pendente.
+deveria conceder acesso. Os endpoints de people aceitam userId apenas para administradores da casa,
+exigem membership correspondente e impedem vinculo duplicado na mesma casa.
+
+## Sessoes
+
+A tabela sessions possui id (SHA-256 do token aleatorio), userId e householdId
+com FK/cascade, csrfToken, expiresAt ISO UTC, createdAt e updatedAt. Indices
+por user e expiracao. O token original existe apenas no cookie HttpOnly.
+A membership e revalidada em cada acesso; sua remocao bloqueia a sessao mesmo
+sem FK composta. A migration 0001 so cria essa tabela e indices.
 
 ## Cadastros financeiros
 
@@ -51,8 +61,11 @@ so verificam existencia do usuario; o fluxo seguro de vinculacao esta pendente.
 
 `currentBalanceCents` e um saldo persistido, atualizado pelos services de
 transacoes. O endpoint de recalculo usa saldo inicial + movimentos confirmados
-nao excluidos. A API tambem permite informar saldo atual diretamente; essa
-inconsistencia potencial esta no [backlog](estado-e-proximos-passos.md).
+nao excluidos. A API rejeita saldo atual informado pelo cliente; alterar saldo
+inicial recalcula o atual atomicamente. As somas usam BigInt internamente, mas
+as colunas/DTOs continuam em centavos inteiros seguros JavaScript. A mudanca
+nao altera o schema SQL e nao exige migration. Dados legados nao sao regravados
+na inicializacao. Moeda de conta com historico nao pode mudar.
 
 Os campos de cartao sao preparacao para funcionalidades futuras. Nao existem
 tabelas de fatura, fechamento efetivo, parcelas ou pagamento de fatura.
@@ -70,7 +83,7 @@ Transferencia usa um unico registro: `accountId` e origem e
 mesmo movimento. `linkedTransactionId` esta no schema, mas o CRUD nao o utiliza.
 
 `createdByUserId` foi reservado para autoria de quem lancou, diferente da pessoa
-responsavel. A API atual nao o preenche, pois nao ha identidade autenticada.
+responsavel. A API o preenche com a identidade autenticada, preservando a autoria ao editar.
 Os campos de recorrencia tambem nao sao alimentados pelo CRUD atual.
 
 ## Planejamento ainda sem endpoints
