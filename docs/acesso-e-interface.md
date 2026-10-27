@@ -215,3 +215,17 @@ por casa/pessoa, moeda e categorias. Consumo confirmado/pendente, disponivel e
 excesso, despesas sem limite, edicao e arquivamento/restauracao. Antes de usar,
 execute npm run db:migrate para aplicar 0003. Nao repetir seed. O plano acompanha
 seu intervalo salvo e nao cria lancamentos nem movimenta contas.
+
+
+## Toda a casa e Casa / sem pessoa
+
+O seletor Visao oferece Toda a casa (consolidado), Casa / sem pessoa (somente
+lancamentos sem pessoa atribuida) e cada pessoa individual. Sao filtros sobre a
+mesma casa autorizada. John/Admin podem ter lancamentos na casa sem que eles
+aparecam em Casa / sem pessoa; para somar os dois, escolher Toda a casa.
+
+Para registrar um compromisso compartilhado sem atribuicao individual, selecione
+Casa / sem pessoa no campo Pessoa do lancamento. Isso nao rateia o valor.
+Se o consolidado estiver vazio apesar dos lancamentos, verificar periodo,
+demais filtros/status, moeda e casa da sessao; nao assumir que a visao sem pessoa
+seja o consolidado. Ver [regras](regras-de-negocio.md).

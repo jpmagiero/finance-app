@@ -1,15 +1,19 @@
 # Desenvolvimento e continuidade em outro computador
 
 Execute os comandos na raiz do clone, salvo indicacao contraria.
-Nao dependa do caminho `/home/john/Projects/finance-app` em outras maquinas.
+Use caminhos do seu clone, sem depender de caminhos pessoais do chat.
+Para um roteiro de ponta a ponta, consulte [retomada](retomada.md): separa dados
+novos de restauracao de backup e fornece o contexto para a proxima sessao.
 
 ## Acesso e frontend (entrega atual)
 
-A API agora exige login. Depois de instalar e aplicar migrations, execute
+A API exige login. Em banco novo, depois de migrations/seed, execute
 auth:provision em terminal interativo para definir o primeiro acesso.
+Em banco restaurado, use os logins existentes.
 A interface usa /api no mesmo origin, com proxy Vite para a API.
 Consulte [acesso e interface](acesso-e-interface.md) para comandos, permissoes
-e configuracao LAN/VPN. As secoes historicas abaixo foram ajustadas no essencial.
+e configuracao LAN/VPN. Recorrencias e orcamentos tambem estao implementados;
+a prioridade atual e o produto, com deploy postergado pelo usuario.
 
 ## Runtime e dependencias
 
@@ -68,11 +72,16 @@ pnpm dev
 ```
 
 Copiar exemplos apenas quando os `.env` ainda nao existem. O `.env` do web e
-opcional para o foco atual no backend. Nunca versionar valores privados.
+opcional quando o proxy local padrao atende. Nunca versionar valores privados.
+O roteiro acima e para banco novo. Em banco restaurado/existente, nao rodar seed;
+aplicar migrations e usar as credenciais existentes. auth:provision somente se
+for necessario criar/recuperar o primeiro login ou redefinir uma senha.
 
 Nao executar db:generate em cada clone: as migrations ja estao versionadas.
 Gerar migration somente depois de alterar intencionalmente o schema.
-Executar migrate e depois seed, em sequencia.
+Em banco novo: executar migrate e depois seed, em sequencia. Migrations atuais
+0000 a 0003; recorrencias usam 0002 e orcamentos usam 0003. Em banco existente,
+somente migrate para atualizar a estrutura.
 
 ## Variaveis de ambiente
 
@@ -202,10 +211,12 @@ Docker Compose e Caddy estao versionados; DNS/VPN sao configuracoes externas.
 2. Consultar arquitetura, regras e contratos da area que sera alterada.
 3. Instalar com lockfile e usar um banco de desenvolvimento.
 4. Implementar, validar comportamento e atualizar Swagger/docs afetados.
-5. Executar check/typecheck/build e registrar verificacoes ou limitacoes reais.
+5. Executar check/typecheck/build/test; test:e2e quando alterar a interface.
+   Registrar verificacoes e limitacoes reais, atualizar o backlog apos a entrega.
 
 Exemplo de contexto suficiente para uma nova sessao:
 
-> Leia AGENTS.md, README.md e docs/estado-e-proximos-passos.md. O foco e o
-> backend. Continue pelo primeiro item pendente, conferindo o codigo antes de
-> considerar qualquer regra ja implementada.
+> Leia AGENTS.md, README.md, docs/retomada.md e docs/estado-e-proximos-passos.md.
+> A prioridade e evoluir o app, com deploy postergado. Lancamentos, dashboard,
+> acesso, recorrencias explicitas e orcamentos estao implementados. Preserve
+> mudancas locais, use banco sintetico e continue pela feature que eu indicar.

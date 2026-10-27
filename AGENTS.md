@@ -1,5 +1,6 @@
 # Contexto do projeto
 
+Para retomar em outra maquina, leia tambem [retomada](docs/retomada.md).
 Leia [README.md](README.md), [arquitetura](docs/arquitetura.md),
 [regras de negocio](docs/regras-de-negocio.md) e
 [estado atual](docs/estado-e-proximos-passos.md) antes de implementar.
@@ -16,6 +17,8 @@ Consulte [API](docs/api.md) e [banco](docs/banco-de-dados.md) conforme a tarefa.
 - `users` representa login; `household_people` representa a pessoa financeira.
 - Pessoa, conta e favorecido sao opcionais nas transacoes; casa e obrigatoria.
 - Uma pessoa pode lancar gastos de outra sem trocar de login.
+- Toda a casa consolida todas as pessoas; Casa / sem pessoa filtra personId nulo.
+  Nao confundir autor do login, pessoa financeira e membership da casa.
 - Tags e settings fazem parte do MVP; settings e uma tabela tipada por casa.
 - Imports, attachments, convites e rateio entre pessoas continuam adiados.
 - Sessoes persistentes foram adotadas: cookie HttpOnly, CSRF e hash do token;
@@ -57,6 +60,14 @@ Producao: consulte docs/producao.md. Nunca testar restauracao no banco pessoal;
 restore exige destino novo. Compose/Caddy e rotina de backup estao versionados.
 
 ## Continuidade
+
+Estado/backlog vigente: docs/estado-e-proximos-passos.md. O plano de analise
+original e historico. Nao reimplementar recorrencias/orcamentos ja entregues.
+Nao iniciar deploy como proximo bloco: usuario priorizou o produto.
+A proxima feature ainda deve ser escolhida; ver opcoes e criterios no backlog.
+Git nao leva dados privados; usar o guia de retomada para banco novo ou restore,
+sem seed em banco existente. Ultima evidencia registrada: 121 testes Node/4 E2E,
+nao garantia de setup em outra maquina; repetir verificacoes no novo ambiente.
 
 Consulte [Skills e MCP](docs/skills-e-mcp.md) para ferramentas recomendadas.
 Essas recomendacoes nao significam que skills ou servidores estejam instalados.

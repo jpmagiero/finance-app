@@ -34,8 +34,8 @@ Cada skill deve consultar estes MDs em vez de duplicar todo o dominio.
 | finance-backend-review | Revisar um bloco do backend | Procurar regressao de saldo, acesso entre casas, null/undefined, exclusoes e contratos divergentes |
 | finance-home-server | Preparar operacao futura | Build/start, volumes, variaveis, backup/restauracao e configuracao do servidor |
 
-Prioridade sugerida: endpoint e migration; review quando a suite de testes
-existir; home-server quando o deploy entrar no escopo. Evitar criar uma skill
+Prioridade sugerida: endpoint/migration e review (a suite ja existe);
+home-server quando o usuario retomar deploy. Evitar criar uma skill
 generica para cada biblioteca sem um workflow repetido que a justifique.
 
 Estrutura proposta, ainda nao criada:
@@ -49,7 +49,8 @@ Estrutura proposta, ainda nao criada:
 ```
 
 As instrucoes devem nomear os comandos reais disponiveis e separar os planejados.
-Exemplo: nao mandar executar pnpm test como se o script ja existisse.
+Hoje existem pnpm test e pnpm test:e2e; consultar package.json antes de recomendar
+comandos novos. O projeto ja possui suite Playwright versionada, sem exigir MCP.
 
 ## MCPs por prioridade
 
@@ -102,6 +103,7 @@ Recomendacao para quando instalar:
 
 Comecaria com AGENTS.md e as docs, depois uma skill de endpoint e uma de
 migration. Adicionaria Context7 se a consulta de documentacao trouxer ganho
-concreto; GitHub quando houver uso recorrente de issues/PRs; Playwright ao
-retomar o front. As credenciais e ferramentas externas nao devem ser necessarias
+concreto; GitHub quando houver uso recorrente de issues/PRs; Playwright MCP
+somente se houver necessidade adicional de explorar a interface. A suite E2E
+existente usa Playwright local. As credenciais e ferramentas externas nao sao necessarias
 para rodar o backend local com SQLite.

@@ -26,6 +26,20 @@ A casa vem da sessao e a membership e revalidada a cada requisicao.
 Vinculos de pessoa/login exigem membership e sao unicos por usuario/casa na
 aplicacao; userId=null remove o vinculo. Acesso nao e concedido por esse vinculo.
 
+## Filtros da casa e pessoas
+
+| Selecao na interface | Criterio | Exemplo |
+| --- | --- | --- |
+| Toda a casa | Sem filtro personId; somente a casa autorizada | John + Admin + sem pessoa |
+| Casa / sem pessoa | personId nulo (query personId=unassigned) | Somente gastos compartilhados sem atribuicao |
+| Uma pessoa | personId escolhido | Somente John, ou somente Admin |
+
+Exemplo: John registra R$ 100 e Admin R$ 200, sem lancamentos sem pessoa.
+Toda a casa mostra R$ 300; Casa / sem pessoa mostra zero, no mesmo periodo e
+demais filtros. Os dois lancamentos continuam pertencendo a mesma casa.
+Selecionar sem pessoa no cadastro atribui o gasto a essa visao; nao o divide
+automaticamente entre membros. Isso nao altera quem e o autor do registro.
+
 ## Transacoes e classificacao
 
 Tipos permitidos em novos payloads: `income`, `expense`, `transfer`.

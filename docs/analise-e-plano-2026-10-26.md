@@ -1,5 +1,10 @@
 # Análise técnica e plano de evolução
 
+Documento historico: diagnostico inicial e registro das entregas posteriores.
+Para decidir o proximo trabalho, use [estado atual](estado-e-proximos-passos.md).
+Para trocar de maquina, use [retomada](retomada.md). Nao tratar a tabela de
+marcos/achados inicial como lista de bugs ou funcionalidades ainda pendentes.
+
 Revisão em **2026-10-26**, sobre o commit `9d85900`, com árvore de trabalho inicialmente limpa. Complementa o [backlog](estado-e-proximos-passos.md). As propostas abaixo não representam funcionalidades entregues. O escopo da primeira entrega e o modo de acesso foram confirmados pelo usuário nesta revisão.
 
 ## Execução das etapas de ambiente e núcleo financeiro

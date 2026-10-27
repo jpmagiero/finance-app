@@ -6,9 +6,11 @@ contas de forma individual e consolidada, mesmo para pessoas sem login.
 
 ## Por onde continuar
 
-Esta documentacao substitui a dependencia do historico do chat. Foi consolidada
-em **2026-10-20**, a partir das decisoes discutidas e do codigo no commit
-`5bbbb44` (`feat/create-services`).
+Esta documentacao substitui a dependencia do historico do chat. Estado atual
+consolidado em **2026-10-26**, incluindo recorrencias e orcamentos.
+Para continuar em outra maquina, comece pelo [guia de retomada](docs/retomada.md)
+e pelo [estado atual e backlog](docs/estado-e-proximos-passos.md).
+O plano de analise original registra o historico, nao a fila atual de entregas.
 
 **Estado atual:** backend financeiro com autenticacao/autorizacao e frontend
 funcional para cadastros, lancamentos e dashboard. Ha testes com SQLite temporario.
@@ -21,10 +23,12 @@ Existir uma tabela nao significa que a feature esta pronta.
 Escopo confirmado em **2026-10-26**: primeira entrega com lancamentos e
 dashboard, acessada pela rede de casa ou VPN com logins individuais.
 Recorrencias e orcamentos foram desenvolvidos na evolucao seguinte. Veja o
-[plano atualizado](docs/analise-e-plano-2026-10-26.md).
+[estado atual e proximos passos](docs/estado-e-proximos-passos.md).
+A prioridade confirmada e evoluir o app; deploy esta postergado.
 
 | Documento | Conteudo |
 | --- | --- |
+| [Retomar em outra maquina](docs/retomada.md) | Clone, setup, dados novos/restaurados e contexto para a proxima sessao |
 | [Arquitetura e decisoes](docs/arquitetura.md) | Produto, escopo, stack escolhida, alternativas e justificativas |
 | [Banco de dados](docs/banco-de-dados.md) | Dicionario das 18 tabelas, relacionamentos, convencoes e migracao futura |
 | [Regras de negocio](docs/regras-de-negocio.md) | Pessoas, casas, transacoes, saldos, categorias e settings |
@@ -53,7 +57,8 @@ docs/           Decisoes, contratos e continuidade
 
 ## Inicio rapido
 
-Com Node 22 e pnpm 9.15.4, execute na raiz do repositorio:
+Para banco novo, com Node 22 e pnpm 9.15.4, execute na raiz do repositorio
+(apenas copie .env se ele ainda nao existir):
 
 ```bash
 pnpm install --frozen-lockfile
@@ -66,6 +71,8 @@ pnpm dev
 ```
 
 Copie o `.env` apenas no primeiro setup, sem sobrescrever configuracoes existentes.
+Em banco restaurado/existente, nao rode seed; aplique migrations e use os
+logins existentes. Git nao transporta banco, .env ou credenciais.
 Para detalhes de instalacao, variaveis e recuperacao dos dados, consulte o
 [guia de desenvolvimento](docs/desenvolvimento.md).
 

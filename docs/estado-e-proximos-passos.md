@@ -1,205 +1,133 @@
-# Estado e proximos passos
+# Estado atual e próximos passos
 
-Levantamento em **2026-10-20**, baseado no commit `5bbbb44`.
-Este arquivo e o ponto de retomada; o levantamento original foi atualizado
-abaixo com as entregas de 2026-10-26.
+Referência de continuidade: **2026-10-26**, após recorrências e orçamentos.
+Este arquivo descreve o estado vigente. O [plano inicial](analise-e-plano-2026-10-26.md)
+contém diagnóstico e decisões históricas; não interpretar achados antigos como
+bugs ainda abertos sem conferir o código.
 
-## Atualizacao de escopo em 2026-10-26
+**Prioridade do usuário:** continuar o desenvolvimento do app antes do deploy.
+Nenhum próximo bloco de funcionalidades foi escolhido após a entrega de orçamentos.
+As prioridades abaixo são sugestões de continuidade, não autorização para
+implementar todas de uma vez. Para outra máquina, siga [retomada](retomada.md).
 
-Decisao confirmada pelo usuario: a primeira entrega utilizavel contempla
-lancamentos e dashboard, com cadastros/settings necessarios. Recorrencias e
-orcamentos ficam para depois. Acesso inicial pela rede de casa ou VPN, com
-logins individuais: autenticacao/autorizacao passam a ser requisitos dessa
-entrega, com mecanismo ainda a definir; convites continuam adiados.
+## Entregue
 
-A implementacao abaixo continua sendo o levantamento historico, sem novas
-features entregues nesta revisao. Para a ordem atualizada, criterios de
-conclusao e limites de verificacao, consulte a
-[analise e plano de 2026-10-26](analise-e-plano-2026-10-26.md).
-Essa decisao substitui a exigencia anterior de recorrencias/orcamentos para
-concluir a primeira entrega; os demais itens tecnicos do backlog permanecem.
-
-## Evolucao atual: orcamentos
-
-API/interface com limites por categoria exata, casa/pessoa, periodos mensal/
-anual/custom e moeda explicita. Consumo por splits de despesas confirmadas e
-pendentes, disponivel/excesso e despesas sem limite. Arquivamento/restauracao,
-autorizacao/CSRF, gravacao atomica e protecao contra sobreposicao.
-Migration 0003 adiciona currency/isArchived e preserva dados existentes.
-Nao foi aplicada no SQLite pessoal. Veja [guia](orcamentos.md).
-A prioridade continua no produto, sem trabalho de deploy nesta etapa.
-Verificacao: 121 testes Node e 4 cenarios Playwright passaram, sem skip;
-check/typecheck/build e diff checks passaram. Tela mobile inspecionada.
-
-## Evolucao anterior: recorrencias
-
-Prioridade confirmada pelo usuario: desenvolvimento do app antes do deploy.
-Recorrencias possuem API/UI: receitas/despesas, quatro frequencias, intervalo,
-inicio/fim, pessoa/conta/favorecido opcionais, splits/tags/notas. Previa e geracao
-explicita de pending, sem duplicar ocorrencias mesmo apos editar/excluir o
-lancamento. Pausa/retomada e edicao da regra preservam historico.
-Migration 0002 adiciona notes/occurrenceDate, templates relacionais e indice unico.
-Nao foi aplicada no banco pessoal. Guia em [recorrencias](recorrencias.md).
-Orcamentos tambem foram autorizados e implementados no bloco seguinte.
-Verificacao desta evolucao: 108 testes Node e 3 cenarios E2E passaram;
-check/typecheck/build e diff check sem erros.
-
-## Revisao final de 2026-10-26: acesso, testes e operacao
-
-- Verificacao final: 94 testes Node e 2 cenarios Playwright passaram, sem skip;
-  check/typecheck/build, instalacao frozen e diff checks passaram.
-- Login revalida hash/usuario ativo em transacao imediata antes de criar sessao.
-  Regressoes deterministicas cobrem troca de senha, provisionamento e desativacao.
-- Provisionamento repete senha invalida/confirmacao diferente com mensagens claras;
-  PTY verificou ausencia de eco e preservacao da identidade do seed.
-- Playwright versionado: fluxo financeiro, cadastros, dashboard, roles, sessao,
-  filtros e mobile; API e Vite isolados com banco sintetico temporario.
-- API compilada via esbuild, shared incluido, start por Node e comandos de banco
-  compilados. Instalacao isolada somente com dependencias de producao exercitada.
-- Dockerfile/Compose, volumes, Caddy HTTPS, readiness e backup online periodico
-  com retencao e restore para arquivo novo. Guia em [producao](producao.md).
-- HTTPS real verificado com CA local confiavel, SPA, Swagger, cookie Secure e CSRF;
-  backup/restauracao compilados tambem exercitados com dados sinteticos.
-- Docker daemon indisponivel: Compose config validado, mas imagens/containers
-  ainda precisam ser construidos/exercitados no home server.
-
-## Entregue em 2026-10-26: acesso e interface funcional
-
-- Login/logout, sessoes SQLite com hash do token, cookie HttpOnly, CSRF,
-  verificacao de origin, limites de tentativas e troca da propria senha.
-- Provisionamento lista casas existentes por numero/ID, repete escolhas invalidas
-  e preserva os dados; selecao e senha oculta verificadas em PTY temporario.
-- Provisionamento inicial/recuperacao local; administradores criam logins
-  de membro e podem vincular pessoa financeira existente sem mudar historico.
-- Autorizacao em listas, recursos por ID, restore, recalc e settings:
-  membership/casa/papel revalidados a cada requisicao; autoria no servidor.
-- Migration 0001 adiciona sessions; lockfile versiona cookie/rate-limit.
-- Dashboard/households extraidos para services; periodo financeiro, pessoa,
-  pendentes separados, despesas por categoria e join de splits filtrado.
-- Paginacao, busca, categoria/tag e extrato com transferencias recebidas.
-- Categorias com hierarquia consistente; vinculos de login validados,
-  null/undefined corrigidos e campos HTTP nullable preservados sem coercao.
-- Politica de arquivamento para novos vinculos e restauracao dos cadastros.
-- Erros centrais 400/401/403/404/409/429; OpenAPI documenta acesso/CSRF.
-- Frontend com login, dashboard real, lancamentos/splits/tags, edicao,
-  confirmacao/exclusao, filtros/paginacao, cadastros e preferencias.
-- Proxy /api no Vite facilita acesso por LAN/VPN; sem credenciais em localStorage.
-
-Veja [acesso e interface](acesso-e-interface.md) para os comandos obrigatorios
-de atualizacao e primeiro login. O banco pessoal nao foi usado para verificacao.
-Contratos genericos restantes e implantacao/validacao no home server continuam pendentes.
-Verificacao: 86 testes, check/typecheck/build, fluxo completo em navegador
-desktop/celular e provisionamento local em PTY passaram com bancos temporarios.
-A verificacao original foi assistida; a revisao final adicionou pnpm test:e2e automatizado.
-
-## Entregue em 2026-10-26: ambiente e nucleo financeiro
-
-- WSL com Node 22.23.4, pnpm 9.15.4 e instalacao pelo lockfile existente.
-  Incluido .nvmrc para selecionar Node 22.
-- Script pnpm test: Node Test Runner + tsx + Fastify inject, sem novo framework.
-  Bancos temporarios com migrations reais, encerramento e limpeza.
-- 60 testes: criacao, edicao, status, transferencia, soft delete/repeticao,
-  splits/tags, referencias de outra casa, limites numericos, datas, contratos,
-  recalc, rollback por falha SQL apos escrita parcial e repeticao de migrate/seed.
-- Saldo atual somente leitura; editar saldo inicial recalcula o atual atomicamente.
-  Edicao de transacao aplica a diferenca liquida exata por conta.
-- Casa de transacao imutavel; escrita de adjustment bloqueada.
-- Transferencias entre moedas distintas rejeitadas; moeda de conta com historico
-  nao pode mudar. Moeda unica por casa continua proposta, nao regra implementada.
-- Calendario real e intervalos validados; inteiros seguros em entradas, saldos
-  e agregacoes. Somas internas usam BigInt, sem mudar DTOs ou schema SQL.
-
-Suite inicialmente reproduziu 12 falhas em 47 cenarios; apos correcoes e
-ampliacao, 60 passaram. Nao houve acesso ao SQLite pessoal nem alteracao de
-.env privado. Sem migration nova porque a estrutura do banco nao mudou.
-Nesse marco historico, build da API era apenas tipos e acesso/login estava pendente;
-ambos foram implementados nos blocos posteriores acima.
-Verificacoes executadas: pnpm test (60/60), pnpm check, pnpm typecheck,
-pnpm build e git diff --check. Nenhuma dependencia adicionada; lockfile preservado.
-
-## O que ja foi entregue
-
-| Area | Estado |
+| Área | Estado |
 | --- | --- |
-| Monorepo | pnpm workspaces, api/web/shared, lockfile e TypeScript strict |
-| Qualidade | Biome na raiz e scripts check/typecheck/build |
-| Persistencia | SQLite, Drizzle, migration inicial e seed |
-| Schema | 18 tabelas incluindo templates de recorrencia, tags, settings e orcamentos |
-| Cadastros | Listar, buscar, criar, editar e arquivar people/categories/accounts |
-| Payees e tags | CRUD com bloqueio de exclusao se usado |
-| Settings | GET e PUT com upsert |
-| Transacoes | Listar, buscar com splits/tagIds, criar, substituir e soft delete |
-| Saldos | Aplicacao/reversao atomica dos movimentos e endpoint de recalculo |
-| Relatorio | Dashboard por periodo/pessoa e casa autorizada da sessao |
-| Swagger | UI, OpenAPI e schemas basicos dos endpoints |
-| Frontend | Login, dashboard, lancamentos, cadastros e preferencias funcionais |
+| Ambiente | Monorepo pnpm; Node 22/pnpm 9.15.4; Fastify/TS/Drizzle/SQLite, React/Vite e Biome |
+| Persistência | 18 tabelas; migrations 0000 a 0003, seed inicial e lockfile versionados |
+| Cadastros | Pessoas/contas/categorias com arquivo/restauração; tags/favorecidos com exclusão protegida |
+| Financeiro | Receitas/despesas/transferências, conta/pessoa/favorecido opcionais, splits/tags, edição, status e soft delete |
+| Integridade | Saldos atômicos, centavos seguros/BigInt, calendário real, mesma casa/moeda, rollback e recálculo |
+| Consultas | Busca, filtros, paginação, extrato com transferências recebidas |
+| Dashboard | Período financeiro/pessoa, fluxo, despesas por categoria, confirmado e pendente separados |
+| Acesso | Login/logout, scrypt, sessões SQLite com hash de token, cookie HttpOnly, CSRF, origin e limites de tentativas |
+| Autorização | Membership/casa/papel por requisição; autoria no servidor; primeiro login/recuperação local e criação de membro |
+| Interface | Fluxos financeiros conectados, estados de erro/loading/vazio e verificação desktop/mobile |
+| Recorrências | Receitas/despesas diárias/semanais/mensais/anuais, intervalo, início/fim, splits/tags/notas; prévia e geração explícita de pending |
+| Idempotência | Chave regra/occurrenceDate preservada após editar data ou excluir; pausa/edição não altera histórico |
+| Orçamentos | Casa/pessoa, moeda, mensal/anual/custom, limites por categoria exata, confirmado/pendente/disponível/excesso |
+| Planejamento | Despesas sem limite separadas; proteção contra sobreposição; arquivo/restauração atômicos |
+| Operação preparada | API ESM via esbuild/start Node; Compose/Caddy HTTPS, volumes e backup online/restore seguro |
 
-O historico Git registra `21e4a33` (base), `17bda0a` (Swagger) e
-`5bbbb44` (services/CRUD). Naquele levantamento ainda nao existiam testes automatizados; a suite atual
-foi adicionada na entrega de 2026-10-26.
-No desenvolvimento anterior foram executados Biome/typecheck/build e smoke
-tests HTTP. Isso e evidencia historica, nao garantia de regressao automatizada.
+Guias de comportamento: [regras](regras-de-negocio.md),
+[acesso/interface](acesso-e-interface.md), [recorrências](recorrencias.md),
+[orçamentos](orcamentos.md), [API](api.md) e [banco](banco-de-dados.md).
 
-O teste manual anterior deixou recursos sinteticos arquivados/soft deleted e
-payee/tag cuja exclusao foi bloqueada por vinculos. Esses dados nao fazem parte
-do seed nem do Git. Nao assumir banco pessoal limpo ou apagar registros pelo
-nome ao retomar; usar banco de teste isolado.
+## Última questão de uso: Casa e pessoas
 
-Uma revisao antiga do chat disse que app.sqlite estava staged, mas a verificacao
-posterior com git ls-files confirmou que nao estava rastreado. O estado correto
-e: banco local ignorado, migrations versionadas.
+O usuário cadastrou valores para John e Admin e relatou zero ao filtrar por casa.
+O código distingue:
+- Toda a casa: soma todas as pessoas e lançamentos sem pessoa da casa autorizada.
+- Casa / sem pessoa: inclui somente personId nulo.
+- Pessoa: inclui somente o personId escolhido.
 
-## Pendencias verificadas no codigo
+Não há rateio automático dos gastos da casa entre pessoas. O login autor e a
+pessoa financeira são independentes. A explicação foi dada ao usuário; não houve
+inspeção/reprodução no banco pessoal nem confirmação de bug em Toda a casa.
 
-| Area | Lacuna | Proximo tratamento recomendado |
+Possível melhoria de UX: tornar os nomes/descrições desses filtros mais claros.
+Se o relato se referir a Toda a casa, investigar período, filtros/status, moeda
+e casa da sessão com reprodução sintética antes de concluir que a consolidação
+está quebrada. Não mudar a semântica para somar pessoas em Casa / sem pessoa.
+
+## Funcionalidades pendentes
+
+| Bloco | O que falta | Critério sugerido para a próxima entrega |
 | --- | --- | --- |
-| Moedas | Transferencia entre moedas diferentes bloqueada; dashboard ainda nao agrega por moeda | Definir moeda unica por casa ou relatorios separados antes de uso multimoeda |
-| Dashboard | Usa periodo configurado e pessoa; competencia segue fora dos totais | Manter transactionDate como criterio explicito; competencia futura se necessaria |
-| Contratos | Zod e JSON Schema duplicados; varias respostas genericas | Alinhar validacao/documentacao e DTOs sem divergencia |
-| Testabilidade | Suite temporaria por processo; services ainda usam db compartilhado | Conexao por instancia se houver necessidade de multiplas apps no mesmo processo |
-| Producao | Bundle/start, Compose/HTTPS e backup/restore implementados; Docker nao exercitado | Validar imagens/containers no home server, CA nos clientes e copia externa |
+| Clareza de visão | Melhorar explicação de consolidado e sem pessoa | John/Admin/sem pessoa com totais inequívocos na interface e testes |
+| Recorrências automáticas | Geração em segundo plano; hoje só ação explícita | Definir quem é o autor, fuso/horário, janela, reinício/pausa e impedir duplicação inclusive com geração manual |
+| Evolução de orçamentos | Copiar/repetir para próximos períodos; sem transporte de sobra hoje | Preservar planos anteriores e revalidar datas, moeda e sobreposição; definir cópia explícita ou automática antes de implementar |
+| Membros e casas | Gestão completa de membros/papéis e troca da casa na UI | Selecionar somente casas autorizadas; regras para revogação/último owner; vínculo financeiro preservado |
+| Cartão | Fatura, fechamento/vencimento e parcelamento | Definir compra x pagamento para não contar despesa duas vezes e tratar parcelas/estornos |
+| Previsões | Projeção por recorrências e histórico | Separar previsto, pendente e realizado; não exigir IA em runtime |
+| Multimoeda | Relatórios por moeda e moeda histórica em lançamentos sem conta | Evitar soma/conversão implícita e definir migração compatível do histórico |
 
-Essas pendencias refletem o backlog apos a revisao final de 2026-10-26.
-Autenticacao/autorizacao estao implementadas e exercitadas; notas anteriores sao historicas.
+Transferências recorrentes, edição/cancelamento em massa de ocorrências e agregação
+de categorias filhas em orçamentos ainda não existem. São evoluções a discutir,
+não requisitos já assumidos.
 
-## Ordem sugerida para continuar
+Imports CSV/OFX, anexos, convites por e-mail e rateio continuam adiados.
+Não há autorização nesta etapa para integrações bancárias ou outras expansões.
 
-1. **Confiabilidade do nucleo (entregue):** manter pnpm test e ampliar a suite
-   a cada nova regra; os cenarios financeiros e rollback ja estao automatizados.
-2. **Contratos restantes:** substituir respostas genericas por DTOs completos,
-   mantendo a suite de acesso e contratos atualizada.
-3. **Consultas (entregue no escopo inicial):** paginacao, busca, categorias/tags,
-   transferencias recebidas e dashboard por periodo/pessoa/fluxo/categoria.
-4. **Recorrencias (entregue):** API/UI e geracao explicita idempotente de pending;
-   agendador e transferencias recorrentes seguem fora desta etapa.
-5. **Orcamentos (entregue):** API/UI, limites por categoria/pessoa/casa,
-   periodos salvos, moedas separadas e comparacao confirmado/pendente.
-6. **Operacao (base entregue):** validar imagens/containers no home server,
-   configurar DNS/CA nos clientes e copia externa dos backups; adicionar CI.
-7. **Frontend inicial (entregue):** evoluir a partir dos fluxos reais descritos
-   em acesso-e-interface.md; ampliar verificacao de acessibilidade e navegador.
-8. **Evolucoes:** previsoes por regras/medias; avaliar rateio, convites e faturas
-   quando trouxerem valor real. Imports/anexos continuam fora do escopo aceito.
+## Melhorias técnicas pendentes
 
-A suite adotou Node Test Runner, tsx e Fastify inject, sem adicionar Vitest.
-O HTTP dos testes Node usa inject; Playwright e verificacoes de producao abrem
-portas locais com dados sinteticos.
+1. **Contratos:** respostas/DTOs completos nos endpoints antigos e reduzir
+   duplicação Zod/OpenAPI. Rotas novas de planejamento já têm contratos específicos.
+2. **Qualidade da interface:** ampliar acessibilidade e cenários de erro, teclado
+   e navegador; manter o fluxo atual coberto.
+3. **CI:** automatizar check/typecheck/build/test/E2E em pushes/PRs. Não há workflow
+   implementado nem acesso remoto configurado por clonar o projeto.
+4. **Testabilidade:** services compartilham db; conexão por instância só quando
+   necessária. Não introduzir repositories/microserviços sem necessidade concreta.
 
-## Criterio para considerar a API do MVP pronta
+Sugestão para retomar: escolher com o usuário o próximo bloco de produto; a
+clareza dos filtros pode ser uma melhoria pequena inicial. Antes de scheduler
+ou faturas, confirmar as decisões específicas da tabela acima.
 
-- Contratos e endpoints do escopo definidos, implementados e exercitaveis no Swagger.
-- Integridade de transacoes e saldos comprovada em testes automatizados.
-- Identidade e acesso resolvidos para o modo de uso escolhido; nenhuma permissao
-  presumida apenas por existir householdId ou role no banco.
-- Recorrencias/orcamentos funcionais se mantidos no escopo de entrega.
-- Dashboard e filtros com resultados coerentes com settings.
-- Migrations, seed e setup repetiveis em outra maquina.
-- Build/start de producao e backup/restauracao verificaveis para o home server.
-- Docs atualizadas com comportamento real e limitacoes restantes.
+## Deploy postergado
 
-## Como manter a memoria do projeto
+Não falta implementar do zero build/start, HTTPS ou backup: a base já existe.
+Falta construir/exercitar imagens e contêineres no home server, configurar DNS,
+confiar na CA nos dispositivos e exportar backups para outro dispositivo.
+O daemon Docker não estava disponível na verificação anterior. A API compilada,
+Caddy HTTPS e backup/restore foram exercitados fora dos contêineres com dados
+sintéticos; Compose config foi validado.
 
-Quando uma decisao mudar, atualizar arquitetura e regras afetadas, anotando motivo.
-Quando mudar tabela, atualizar banco e versionar migration. Quando mudar endpoint,
-atualizar API/Swagger e testes. Ao finalizar um bloco, mover seu estado neste
-arquivo de pendente para entregue com a verificacao realizada.
+Não retomar deploy como prioridade sem nova orientação do usuário.
+Veja [produção](producao.md) quando esse bloco voltar ao escopo.
+
+## Limites atuais que precisam ser preservados
+
+- Só confirmed movimenta saldo; pending/canceled não. Recorrências geram pending.
+- Datas financeiras são de negócio; dashboard usa transactionDate, não competência.
+- Adjustment continua bloqueado para novas escritas.
+- Transferências exigem contas distintas da mesma moeda.
+- Dashboard oculta consolidação de moedas diferentes; orçamento separa por moeda.
+- Sem conta, moeda vem do settings atual; não há moeda histórica própria.
+- Orçamento usa categoria exata e pending no comprometido mesmo se o dashboard
+  estiver configurado para ocultar pendentes.
+- Mensal segue início financeiro ao criar a janela; datas salvas não se deslocam
+  com mudanças posteriores em settings. Orçamento não se repete automaticamente.
+- Sessão escolhe membership em ordem estável; UI ainda não troca entre casas.
+- Seed é para banco novo; auth:provision não cria casas nem é convite multiusuário.
+
+## Evidências e retomada
+
+Última verificação da implementação anterior, em 2026-10-26:
+- 121 testes Node e 4 cenários Playwright passaram, sem skip.
+- check, typecheck, build e diff checks passaram.
+- Telas desktop/mobile, inclusive orçamento em 390px, foram exercitadas/inspecionadas.
+- Migrations e testes usaram SQLite temporário e dados sintéticos; o agente não
+  aplicou migrations no banco pessoal. Isso não informa se o usuário já as aplicou.
+- O provisionamento foi exercitado em PTY, com senha sem eco, nova tentativa e
+  preservação dos vínculos do seed.
+
+Essas evidências não significam que o setup foi validado em qualquer máquina.
+Execute os checks novamente no novo clone. Nesta revisão de continuidade foram
+alterados somente documentos; pnpm test/test:e2e não foram repetidos nesta rodada.
+
+Antes de nova feature: ler AGENTS/README/retomada, conferir git status, instalar
+pelo lockfile e escolher banco de desenvolvimento. Depois da feature: atualizar
+Zod/OpenAPI, migrations quando necessárias, testes e docs. Nunca testar no SQLite
+financeiro pessoal nem versionar .env, snapshots ou credenciais.
