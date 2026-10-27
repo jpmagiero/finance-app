@@ -19,6 +19,31 @@ conclusao e limites de verificacao, consulte a
 Essa decisao substitui a exigencia anterior de recorrencias/orcamentos para
 concluir a primeira entrega; os demais itens tecnicos do backlog permanecem.
 
+## Evolucao atual: orcamentos
+
+API/interface com limites por categoria exata, casa/pessoa, periodos mensal/
+anual/custom e moeda explicita. Consumo por splits de despesas confirmadas e
+pendentes, disponivel/excesso e despesas sem limite. Arquivamento/restauracao,
+autorizacao/CSRF, gravacao atomica e protecao contra sobreposicao.
+Migration 0003 adiciona currency/isArchived e preserva dados existentes.
+Nao foi aplicada no SQLite pessoal. Veja [guia](orcamentos.md).
+A prioridade continua no produto, sem trabalho de deploy nesta etapa.
+Verificacao: 121 testes Node e 4 cenarios Playwright passaram, sem skip;
+check/typecheck/build e diff checks passaram. Tela mobile inspecionada.
+
+## Evolucao anterior: recorrencias
+
+Prioridade confirmada pelo usuario: desenvolvimento do app antes do deploy.
+Recorrencias possuem API/UI: receitas/despesas, quatro frequencias, intervalo,
+inicio/fim, pessoa/conta/favorecido opcionais, splits/tags/notas. Previa e geracao
+explicita de pending, sem duplicar ocorrencias mesmo apos editar/excluir o
+lancamento. Pausa/retomada e edicao da regra preservam historico.
+Migration 0002 adiciona notes/occurrenceDate, templates relacionais e indice unico.
+Nao foi aplicada no banco pessoal. Guia em [recorrencias](recorrencias.md).
+Orcamentos tambem foram autorizados e implementados no bloco seguinte.
+Verificacao desta evolucao: 108 testes Node e 3 cenarios E2E passaram;
+check/typecheck/build e diff check sem erros.
+
 ## Revisao final de 2026-10-26: acesso, testes e operacao
 
 - Verificacao final: 94 testes Node e 2 cenarios Playwright passaram, sem skip;
@@ -99,7 +124,7 @@ pnpm build e git diff --check. Nenhuma dependencia adicionada; lockfile preserva
 | Monorepo | pnpm workspaces, api/web/shared, lockfile e TypeScript strict |
 | Qualidade | Biome na raiz e scripts check/typecheck/build |
 | Persistencia | SQLite, Drizzle, migration inicial e seed |
-| Schema | 16 tabelas incluindo tags, settings, recorrencias e orcamentos |
+| Schema | 18 tabelas incluindo templates de recorrencia, tags, settings e orcamentos |
 | Cadastros | Listar, buscar, criar, editar e arquivar people/categories/accounts |
 | Payees e tags | CRUD com bloqueio de exclusao se usado |
 | Settings | GET e PUT com upsert |
@@ -145,10 +170,10 @@ Autenticacao/autorizacao estao implementadas e exercitadas; notas anteriores sao
    mantendo a suite de acesso e contratos atualizada.
 3. **Consultas (entregue no escopo inicial):** paginacao, busca, categorias/tags,
    transferencias recebidas e dashboard por periodo/pessoa/fluxo/categoria.
-4. **Recorrencias:** CRUD, gerar ocorrencias idempotentes, datas de vencimento e
-   templates compativeis com os tipos permitidos; agendador so quando necessario.
-5. **Orcamentos:** CRUD de budgets/items, limites por categoria e pessoa/casa,
-   comparacao planejado vs realizado e validacao de periodos.
+4. **Recorrencias (entregue):** API/UI e geracao explicita idempotente de pending;
+   agendador e transferencias recorrentes seguem fora desta etapa.
+5. **Orcamentos (entregue):** API/UI, limites por categoria/pessoa/casa,
+   periodos salvos, moedas separadas e comparacao confirmado/pendente.
 6. **Operacao (base entregue):** validar imagens/containers no home server,
    configurar DNS/CA nos clientes e copia externa dos backups; adicionar CI.
 7. **Frontend inicial (entregue):** evoluir a partir dos fluxos reais descritos

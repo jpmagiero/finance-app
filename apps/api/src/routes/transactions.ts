@@ -42,7 +42,7 @@ const idParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-const transactionBodySchema = {
+export const transactionBodySchema = {
   type: "object",
   required: ["householdId", "type", "amountCents", "transactionDate", "splits"],
   properties: {

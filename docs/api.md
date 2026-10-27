@@ -221,3 +221,18 @@ GET /health/ e liveness publico. GET /health/ready e readiness publico: 200
 quando a tabela de sessoes pode ser consultada, 503 caso contrario. Nao substitui
 validacao de integridade do banco. OPENAPI_SERVER_URL define o prefixo anunciado
 (default /; /api no Compose). Veja [producao](producao.md).
+
+## Recorrencias
+
+API/interface implementadas em /recurring; CRUD sem exclusao fisica, pausa/retomada,
+previa e geracao explicita de receitas/despesas pending. Templates com splits/tags.
+Sessao e CSRF exigidos; member opera as regras da propria casa. Os schemas Zod
+e OpenAPI foram adicionados juntos, com respostas tipadas para as novas rotas.
+Veja [endpoints, payloads e regras de idempotencia](recorrencias.md).
+
+## Orcamentos
+
+Rotas /budgets implementadas: lista/detalhe, summary por splits, criacao,
+substituicao atomica de itens, arquivamento e restore. Sessao/CSRF e isolamento
+por casa; member tambem opera planos. Zod e OpenAPI incluem contratos novos,
+com moeda, datas salvas e valores seguros. Veja [payloads e endpoints](orcamentos.md).

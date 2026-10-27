@@ -1,6 +1,6 @@
-import { createTransactionSchema } from "@finance/shared";
+import { type CreateTransactionInput, createTransactionSchema } from "@finance/shared";
 import { Plus, Trash2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { api } from "../lib/api";
 import type { Catalogs, Transaction } from "../lib/models";
 import { statusLabels, typeLabels } from "../lib/models";
@@ -14,15 +14,23 @@ export function TransactionForm({
   transaction,
   onClose,
   onSaved,
+  recurringMode = false,
+  extraFields,
+  onSubmitInput,
 }: {
   data: Catalogs;
   householdId: string;
   transaction?: Transaction;
   onClose: () => void;
   onSaved: () => void;
+  recurringMode?: boolean;
+  extraFields?: ReactNode;
+  onSubmitInput?: (input: CreateTransactionInput, form: FormData) => Promise<void>;
 }) {
   const [type, setType] = useState(transaction?.type ?? "expense");
-  const [status, setStatus] = useState(transaction?.status ?? "confirmed");
+  const [status, setStatus] = useState(
+    transaction?.status ?? (recurringMode ? "pending" : "confirmed"),
+  );
   const [amount, setAmount] = useState(transaction ? amountInput(transaction.amountCents) : "");
   const [splits, setSplits] = useState(() =>
     (transaction?.splits ?? [{ amountCents: 0 }]).map((s) => ({
@@ -63,10 +71,12 @@ export function TransactionForm({
       });
       if (!input.success)
         throw new Error(input.error.issues.map((issue) => issue.message).join(" "));
-      await api(transaction ? `/transactions/${transaction.id}` : "/transactions/", {
-        method: transaction ? "PUT" : "POST",
-        body: input.data,
-      });
+      if (onSubmitInput) await onSubmitInput(input.data, form);
+      else
+        await api(transaction ? `/transactions/${transaction.id}` : "/transactions/", {
+          method: transaction ? "PUT" : "POST",
+          body: input.data,
+        });
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao salvar.");
@@ -76,7 +86,15 @@ export function TransactionForm({
   }
   return (
     <Modal
-      title={transaction ? "Editar lançamento" : "Novo lançamento"}
+      title={
+        recurringMode
+          ? transaction
+            ? "Editar recorrência"
+            : "Nova recorrência"
+          : transaction
+            ? "Editar lançamento"
+            : "Novo lançamento"
+      }
       onClose={onClose}
       busy={busy}
     >
@@ -93,27 +111,31 @@ export function TransactionForm({
                   setSplits(splits.map((s) => ({ ...s, categoryId: "" })));
                 }}
               >
-                {(["expense", "income", "transfer"] as const).map((v) => (
-                  <option key={v} value={v}>
-                    {typeLabels[v]}
-                  </option>
-                ))}
+                {(["expense", "income", "transfer"] as const)
+                  .filter((value) => !recurringMode || value !== "transfer")
+                  .map((v) => (
+                    <option key={v} value={v}>
+                      {typeLabels[v]}
+                    </option>
+                  ))}
               </select>
             </label>
-            <label>
-              Status
-              <select
-                aria-label="Status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as typeof status)}
-              >
-                {(["confirmed", "pending", "canceled"] as const).map((v) => (
-                  <option key={v} value={v}>
-                    {statusLabels[v]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!recurringMode && (
+              <label>
+                Status
+                <select
+                  aria-label="Status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as typeof status)}
+                >
+                  {(["confirmed", "pending", "canceled"] as const).map((v) => (
+                    <option key={v} value={v}>
+                      {statusLabels[v]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Valor
               <input
@@ -129,7 +151,7 @@ export function TransactionForm({
               />
             </label>
             <label>
-              Data
+              {recurringMode ? "Início da recorrência" : "Data"}
               <input
                 required
                 name="date"
@@ -138,6 +160,7 @@ export function TransactionForm({
               />
             </label>
           </div>
+          {extraFields}
           <label>
             Descrição
             <input
@@ -319,15 +342,17 @@ export function TransactionForm({
             </div>
           )}
           <details>
-            <summary>Competência e observações</summary>
-            <label>
-              Data de competência
-              <input
-                name="competenceDate"
-                type="date"
-                defaultValue={transaction?.competenceDate ?? ""}
-              />
-            </label>
+            <summary>{recurringMode ? "Observações" : "Competência e observações"}</summary>
+            {!recurringMode && (
+              <label>
+                Data de competência
+                <input
+                  name="competenceDate"
+                  type="date"
+                  defaultValue={transaction?.competenceDate ?? ""}
+                />
+              </label>
+            )}
             <label>
               Observações
               <textarea name="notes" maxLength={2000} defaultValue={transaction?.notes ?? ""} />
@@ -345,7 +370,7 @@ export function TransactionForm({
             Cancelar
           </button>
           <button type="submit" className="primary-button" disabled={busy}>
-            {busy ? "Salvando…" : "Salvar lançamento"}
+            {busy ? "Salvando…" : recurringMode ? "Salvar recorrência" : "Salvar lançamento"}
           </button>
         </footer>
       </form>

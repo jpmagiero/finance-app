@@ -199,3 +199,19 @@ Na primeira vez: pnpm exec playwright install --with-deps chromium (bibliotecas
 do sistema podem exigir privilegios administrativos). Nao apontar para o banco
 pessoal. Os dois cenarios incluem fluxo financeiro/roles/mobile e credenciais
 invalidas, com screenshots/traces locais apenas em caso de falha.
+
+## Evolucao: recorrencias
+
+A navegacao inclui Recorrencias para todos os papeis da casa. Criar/editar regras
+de receitas/despesas, escolher intervalo, conferir previa e gerar pending.
+Pausa/retomada preserva historico; a lista de lancamentos sinaliza a origem
+recorrente e a data original. Antes de usar: npm run db:migrate. Nao ha geracao
+automatica em background. Veja [guia](recorrencias.md). Orcamentos tambem foram implementados; [guia](orcamentos.md).
+
+## Evolucao: orcamentos
+
+Navegacao Orcamentos para todos os papeis. Planos mensais/anuais/personalizados
+por casa/pessoa, moeda e categorias. Consumo confirmado/pendente, disponivel e
+excesso, despesas sem limite, edicao e arquivamento/restauracao. Antes de usar,
+execute npm run db:migrate para aplicar 0003. Nao repetir seed. O plano acompanha
+seu intervalo salvo e nao cria lancamentos nem movimenta contas.

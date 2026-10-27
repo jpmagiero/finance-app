@@ -1,6 +1,8 @@
 # Banco de dados
 
-Atualizacao 2026-10-26: 16 tabelas; migration 0001 adiciona sessions.
+Atualizacao 2026-10-26: 18 tabelas; migration 0001 adiciona sessions e
+0002 adiciona templates relacionais e idempotencia de recorrencias;
+0003 adiciona moeda e arquivamento aos orcamentos.
 
 Inventario do schema em `apps/api/src/db/schema.ts`, referencia `5bbbb44`.
 A migration inicial esta em `apps/api/drizzle/0000_lazy_mantis.sql`, com snapshot
@@ -84,19 +86,36 @@ mesmo movimento. `linkedTransactionId` esta no schema, mas o CRUD nao o utiliza.
 
 `createdByUserId` foi reservado para autoria de quem lancou, diferente da pessoa
 responsavel. A API o preenche com a identidade autenticada, preservando a autoria ao editar.
-Os campos de recorrencia tambem nao sao alimentados pelo CRUD atual.
+Geracao recorrente preenche isRecurring, recurringTransactionId e occurrenceDate;
+o CRUD manual nao permite escolher esses campos e os preserva em edicoes.
 
-## Planejamento ainda sem endpoints
+## Recorrencias e planejamento
 
 | Tabela | Campos de negocio | Constraints e observacoes |
 | --- | --- | --- |
-| `recurring_transactions` | `householdId`, `personId?`, `accountId?`, `categoryId?`, `payeeId?`, `type`, `amountCents`, `description?`, `frequency`, `interval=1`, `dayOfMonth?`, `dayOfWeek?`, `startsAt`, `endsAt?`, `nextRunAt?`, `autoCreate=false`, `isActive=true` | Frequency: daily, weekly, monthly, yearly; nao ha agendador |
-| `budgets` | `householdId`, `personId?`, `name`, `period`, `startsAt`, `endsAt?` | Period: monthly, yearly, custom |
+| `recurring_transactions` | `householdId`, `personId?`, `accountId?`, `categoryId?`, `payeeId?`, `type`, `amountCents`, `description?`, `frequency`, `interval=1`, `dayOfMonth?`, `dayOfWeek?`, `startsAt`, `endsAt?`, `nextRunAt?`, `autoCreate=false`, `isActive=true` | Frequency: daily, weekly, monthly, yearly; geracao explicita via API, sem agendador |
+| `budgets` | `householdId`, `personId?`, `name`, `period`, `startsAt`, `endsAt?`, `currency=BRL`, `isArchived=false` | Period: monthly, yearly, custom; API exige fim |
 | `budget_items` | `budgetId`, `categoryId`, `limitCents` | Unique orcamento/categoria |
 
-Recorrencias ainda nao suportam conta destino para transferencia, splits ou
-tags no template. Antes de ativar geracao automatica, completar o contrato,
-definir idempotencia e regras de datas, como recorrencia no dia 31.
+A migration 0002 adiciona notes em recurring_transactions, occurrence_date em
+transactions e o indice unico transactions_recurring_occurrence_idx sobre
+(recurring_transaction_id, occurrence_date). A chave permanece no soft delete
+e nao muda ao editar transaction_date. Campos legados nextRunAt/autoCreate e
+dayOfMonth/dayOfWeek nao acionam jobs; novas regras usam startsAt como ancora.
+
+Novas tabelas (total atual: 18):
+- recurring_splits: id, recurringTransactionId, categoryId?, amountCents, description?.
+  FK da regra com cascade, categoria com set null; indice pela regra.
+- recurring_tags: recurringTransactionId/tagId, PK composta, FKs com cascade.
+
+O template suporta splits/tags, notas e somente income/expense. Referencias sao
+validadas pelo service financeiro; geracao pending e atomica. Nao ha transferencia
+recorrente. Orcamentos/budget_items possuem endpoints descritos em [orcamentos](orcamentos.md).
+
+A migration 0003 adiciona currency/is_archived; moeda de planos existentes e
+preenchida pelo settings da casa ou BRL se ausente. Novos planos exigem moeda
+explicita e fim inclusivo. Overlap entre planos ativos e validado no service sob
+transacao imediata (FK/indice unico por item nao substitui essa regra).
 
 ## Relacionamentos e exclusao
 

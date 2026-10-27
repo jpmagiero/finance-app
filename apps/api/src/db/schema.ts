@@ -192,6 +192,7 @@ export const recurringTransactions = sqliteTable(
     type: text("type", { enum: ["income", "expense", "transfer", "adjustment"] }).notNull(),
     amountCents: integer("amount_cents").notNull(),
     description: text("description"),
+    notes: text("notes"),
     frequency: text("frequency", { enum: ["daily", "weekly", "monthly", "yearly"] }).notNull(),
     interval: integer("interval").notNull().default(1),
     dayOfMonth: integer("day_of_month"),
@@ -239,6 +240,7 @@ export const transactions = sqliteTable(
       (): AnySQLiteColumn => transactions.id,
       { onDelete: "set null" },
     ),
+    occurrenceDate: text("occurrence_date"),
     isRecurring: integer("is_recurring", { mode: "boolean" }).notNull().default(false),
     recurringTransactionId: text("recurring_transaction_id").references(
       () => recurringTransactions.id,
@@ -251,6 +253,10 @@ export const transactions = sqliteTable(
     deletedAt: text("deleted_at"),
   },
   (table) => ({
+    recurringOccurrenceIdx: uniqueIndex("transactions_recurring_occurrence_idx").on(
+      table.recurringTransactionId,
+      table.occurrenceDate,
+    ),
     householdDateIdx: index("transactions_household_date_idx").on(
       table.householdId,
       table.transactionDate,
@@ -323,6 +329,8 @@ export const budgets = sqliteTable(
     personId: text("person_id").references(() => householdPeople.id, {
       onDelete: "set null",
     }),
+    currency: text("currency").notNull().default("BRL"),
+    isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
     name: text("name").notNull(),
     period: text("period", { enum: ["monthly", "yearly", "custom"] }).notNull(),
     startsAt: text("starts_at").notNull(),
@@ -383,4 +391,32 @@ export const sessions = sqliteTable(
     userIdx: index("sessions_user_idx").on(table.userId),
     expiresIdx: index("sessions_expires_idx").on(table.expiresAt),
   }),
+);
+
+export const recurringSplits = sqliteTable(
+  "recurring_splits",
+  {
+    id: text("id").primaryKey(),
+    recurringTransactionId: text("recurring_transaction_id")
+      .notNull()
+      .references(() => recurringTransactions.id, { onDelete: "cascade" }),
+    categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
+    amountCents: integer("amount_cents").notNull(),
+    description: text("description"),
+  },
+  (table) => ({
+    recurringIdx: index("recurring_splits_recurring_idx").on(table.recurringTransactionId),
+  }),
+);
+export const recurringTags = sqliteTable(
+  "recurring_tags",
+  {
+    recurringTransactionId: text("recurring_transaction_id")
+      .notNull()
+      .references(() => recurringTransactions.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.recurringTransactionId, table.tagId] }) }),
 );

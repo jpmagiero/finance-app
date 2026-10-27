@@ -232,3 +232,122 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
   newPassword: z.string().min(12).max(128),
 });
+
+export const recurrenceFrequencies = ["daily", "weekly", "monthly", "yearly"] as const;
+export const recurringInputSchema = transactionPayloadSchema
+  .innerType()
+  .omit({ transactionDate: true, competenceDate: true, status: true, transferAccountId: true })
+  .extend({
+    type: z.enum(["income", "expense"]),
+    frequency: z.enum(recurrenceFrequencies),
+    interval: z.number().int().min(1).max(120).default(1),
+    startsAt: dateStringSchema,
+    endsAt: dateStringSchema.nullable().optional(),
+    isActive: z.boolean().default(true),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.endsAt && value.endsAt < value.startsAt)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Fim deve ser igual ou posterior ao inicio.",
+        path: ["endsAt"],
+      });
+    const result = createTransactionSchema.safeParse({
+      ...value,
+      status: "pending",
+      transactionDate: value.startsAt,
+    });
+    if (!result.success) for (const issue of result.error.issues) context.addIssue(issue);
+  });
+export type RecurringInput = z.infer<typeof recurringInputSchema>;
+export const recurrenceRangeSchema = z
+  .object({ from: dateStringSchema, to: dateStringSchema })
+  .strict()
+  .refine(
+    (value) =>
+      value.from <= value.to &&
+      new Date(value.to).getTime() - new Date(value.from).getTime() <= 365 * 86400000,
+    {
+      message: "Escolha um intervalo de ate 366 dias, com inicio menor ou igual ao fim.",
+      path: ["to"],
+    },
+  );
+
+export const budgetInputSchema = z
+  .object({
+    householdId: idSchema,
+    personId: optionalIdSchema,
+    name: z.string().trim().min(1).max(120),
+    period: z.enum(budgetPeriods),
+    startsAt: dateStringSchema,
+    endsAt: dateStringSchema,
+    currency: z.string().regex(/^[A-Z]{3}$/, "Use uma moeda de tres letras, como BRL."),
+    items: z
+      .array(z.object({ categoryId: idSchema, limitCents: positiveMoneyCentsSchema }).strict())
+      .min(1)
+      .max(100),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.startsAt > value.endsAt)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Inicio deve ser menor ou igual ao fim.",
+        path: ["endsAt"],
+      });
+    if (new Set(value.items.map((item) => item.categoryId)).size !== value.items.length)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cada categoria pode ter somente um limite.",
+        path: ["items"],
+      });
+    if (
+      value.items.every((item) => Number.isSafeInteger(item.limitCents)) &&
+      value.items.reduce((total, item) => total + BigInt(item.limitCents), 0n) >
+        BigInt(Number.MAX_SAFE_INTEGER)
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Soma dos limites fora da faixa segura.",
+        path: ["items"],
+      });
+  });
+export type BudgetInput = z.infer<typeof budgetInputSchema>;
+export function budgetPeriodRange(period: "monthly" | "yearly", anchor: string, startDay = 1) {
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(
+    Number(anchor.slice(0, 4)),
+    period === "yearly" ? 0 : Number(anchor.slice(5, 7)) - 1,
+    period === "yearly" ? 1 : startDay,
+  );
+  const startsAt = date.toISOString().slice(0, 10);
+  if (period === "yearly") date.setUTCFullYear(date.getUTCFullYear() + 1);
+  else date.setUTCMonth(date.getUTCMonth() + 1);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return { startsAt, endsAt: date.toISOString().slice(0, 10) };
+}
+
+export type BudgetRecord = Omit<BudgetInput, "personId"> & {
+  id: string;
+  personId: string | null;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+export type BudgetConsumption = {
+  confirmedCents: number;
+  pendingCents: number;
+  committedCents: number;
+};
+export type BudgetRemaining = { remainingCents: number; exceededCents: number };
+export type BudgetSummary = {
+  budget: BudgetRecord;
+  items: (BudgetInput["items"][number] & { categoryName: string } & BudgetConsumption &
+    BudgetRemaining)[];
+  unbudgeted: ({ categoryId: string | null; categoryName: string } & BudgetConsumption)[];
+  totals: { limitCents: number } & BudgetConsumption & BudgetRemaining;
+  unbudgetedCents: number;
+  excludedCurrencyCount: number;
+};

@@ -8,7 +8,7 @@ Consulte [API](docs/api.md) e [banco](docs/banco-de-dados.md) conforme a tarefa.
 ## Decisoes estabelecidas
 
 - Estado atual: backend e frontend financeiros com acesso individual;
-  foco seguinte em contratos restantes e validacao do deploy no home server.
+  prioridade atual: evoluir o produto; deploy foi postergado.
 - Monorepo pnpm: `apps/api`, `apps/web`, `packages/shared`.
 - Fastify + TypeScript + Drizzle + SQLite; React + Vite; Biome em ambos.
 - Node 22 e pnpm 9.15.4 sao as referencias do setup atual.
@@ -20,7 +20,11 @@ Consulte [API](docs/api.md) e [banco](docs/banco-de-dados.md) conforme a tarefa.
 - Imports, attachments, convites e rateio entre pessoas continuam adiados.
 - Sessoes persistentes foram adotadas: cookie HttpOnly, CSRF e hash do token;
   senhas com scrypt. Nunca adicionar bypass de autenticacao ao app real.
-- Primeira entrega (2026-10-26): lancamentos e dashboard; recorrencias/orcamentos depois.
+- Primeira entrega: lancamentos/dashboard. Recorrencias agora possuem API/UI,
+  geracao explicita de pending e chave regra/occurrenceDate unica, inclusive soft deleted.
+  Veja docs/recorrencias.md. Orcamentos autorizados e implementados: docs/orcamentos.md.
+  Consumo por categoria exata, moedas separadas, pending/confirmed e periodos salvos;
+  nao sobrepor limites ativos para mesma categoria/pessoa/casa/moeda.
 - Acesso inicial por LAN/VPN com logins individuais. Autorizacao verifica
   membership, casa e papel a cada requisicao. Primeiro login por auth:provision;
   veja docs/acesso-e-interface.md. Roles isoladas no banco nao sao autorizacao.

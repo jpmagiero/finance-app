@@ -1,7 +1,13 @@
 import type { CreateCategoryInput, UpdateCategoryInput } from "@finance/shared";
 import { and, eq, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { categories, transactionSplits } from "../db/schema";
+import {
+  budgetItems,
+  categories,
+  recurringSplits,
+  recurringTransactions,
+  transactionSplits,
+} from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -95,8 +101,13 @@ export function updateCategory(id: string, input: UpdateCategoryInput) {
   if (parentId && (input.parentId !== undefined || type !== category.type))
     ensureParentCategory(parentId, category.householdId, type, id);
   if (type !== category.type) {
-    if (db.select().from(transactionSplits).where(eq(transactionSplits.categoryId, id)).get())
-      badRequest("Tipo de categoria com historico nao pode mudar.");
+    if (
+      db.select().from(budgetItems).where(eq(budgetItems.categoryId, id)).get() ||
+      db.select().from(transactionSplits).where(eq(transactionSplits.categoryId, id)).get() ||
+      db.select().from(recurringSplits).where(eq(recurringSplits.categoryId, id)).get() ||
+      db.select().from(recurringTransactions).where(eq(recurringTransactions.categoryId, id)).get()
+    )
+      badRequest("Tipo de categoria com historico, recorrencia ou orcamento nao pode mudar.");
     if (
       db
         .select()

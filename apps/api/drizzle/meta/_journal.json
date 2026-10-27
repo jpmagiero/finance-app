@@ -15,6 +15,20 @@
       "when": 1793056839419,
       "tag": "0001_gigantic_scarlet_witch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793062523651,
+      "tag": "0002_talented_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793063427865,
+      "tag": "0003_swift_pride",
+      "breakpoints": true
     }
   ]
 }

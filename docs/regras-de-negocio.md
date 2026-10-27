@@ -165,3 +165,37 @@ A interface oculta consolidacao de moedas distintas; nao ha cambio.
 Previsoes futuras devem comecar com recorrencias, renda esperada, compromissos
 e medias historicas por categoria. Nao foi escolhido modelo estatistico, provedor
 de IA, biblioteca de graficos nem servico externo para isso.
+
+## Recorrencias implementadas
+
+Receitas/despesas com frequencia diaria/semanal/mensal/anual e intervalo 1 a 120.
+startsAt ancora o calendario, endsAt e inclusivo; dias ausentes usam o ultimo
+dia do mes sem desviar a ancora. Geracao explicita por intervalo de ate 366 dias
+cria pending, com autoria do login e copia de splits/tags/observacoes.
+
+O par regra/occurrenceDate e unico, inclusive apos soft delete ou edicao da
+data do lancamento. Editar/pausar a regra preserva os lancamentos existentes.
+Um pedido de geracao e atomico; referencias arquivadas bloqueiam novas
+ocorrencias. Tipo de categoria/moeda de conta referenciados por regra nao podem
+mudar; tags/favorecidos em uso nao podem ser apagados, inclusive em regra pausada.
+Member tambem opera regras da propria casa. Veja [detalhes](recorrencias.md).
+Orcamentos tambem foram implementados: [regras completas](orcamentos.md).
+
+## Orcamentos implementados
+
+Limites positivos por categoria de despesa exata; plano da casa inclui todas
+as pessoas e sem pessoa, plano individual filtra personId. Consumo vem dos splits
+de expense por transactionDate: confirmed e pending separados, canceled/deleted
+excluidos. Comprometido = confirmado + pendente; disponivel = limite - comprometido.
+Pendentes entram independentemente de includePendingInReports.
+
+Monthly segue monthlyPeriodStartDay ao criar/alterar a janela; yearly e calendario
+anual; custom tem datas explicitas. Datas salvas preservam planos apos mudar settings.
+Moedas sao separadas, sem cambio; sem conta usa moeda atual da casa. Categorias
+sem limite e sem categoria sao exibidas separadamente. Pai nao agrega filhos.
+
+Nao sobrepor limites ativos na mesma categoria, casa/pessoa exata e moeda em
+intervalos inclusivos sobrepostos. Casa e individuo coexistem como visoes.
+Arquivar preserva itens/historico; restaurar revalida sobreposicao. Gravacao de
+itens atomica; nenhum comando altera saldos. Todos os papeis operam na propria
+casa, com sessao/CSRF. Categorias em uso nao podem mudar de tipo.

@@ -316,7 +316,16 @@ export function getTransaction(id: string) {
   };
 }
 
-export function createTransaction(input: CreateTransactionInput, createdByUserId?: string) {
+export function validateNewTransaction(input: CreateTransactionInput) {
+  const normalized = normalizeTransactionInput(createTransactionSchema.parse(input));
+  ensureTransactionReferences(normalized);
+  return normalized;
+}
+export function createTransaction(
+  input: CreateTransactionInput,
+  createdByUserId?: string,
+  recurrence?: { recurringTransactionId: string; occurrenceDate: string },
+) {
   const normalizedInput = normalizeTransactionInput(createTransactionSchema.parse(input));
   ensureTransactionReferences(normalizedInput);
 
@@ -328,6 +337,9 @@ export function createTransaction(input: CreateTransactionInput, createdByUserId
       .values({
         id: transactionId,
         createdByUserId: createdByUserId ?? null,
+        recurringTransactionId: recurrence?.recurringTransactionId ?? null,
+        occurrenceDate: recurrence?.occurrenceDate ?? null,
+        isRecurring: !!recurrence,
         householdId: normalizedInput.householdId,
         personId: normalizedInput.personId,
         accountId: normalizedInput.accountId,

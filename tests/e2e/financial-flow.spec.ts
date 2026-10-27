@@ -141,7 +141,7 @@ test("administrator and member can complete the financial workflow on desktop an
     .getByLabel("Pessoa financeira", { exact: true })
     .selectOption({ label: "Outra pessoa E2E" });
   await add.getByRole("button", { name: "Criar login de membro", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Login criado");
+  await expect(page.locator(".success-banner")).toContainText("Login criado");
   await page.getByRole("button", { name: "Sair da conta", exact: true }).click();
   await signIn(page, "member@example.invalid", "Synthetic-Member-123!");
   await go(page, "Cadastros");

@@ -6,7 +6,7 @@ import {
 } from "@finance/shared";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "../db";
-import { accounts, transactions } from "../db/schema";
+import { accounts, recurringTransactions, transactions } from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { moneyAsBigInt, safeMoneyCents } from "../lib/money";
@@ -105,8 +105,11 @@ export function updateAccount(id: string, input: UpdateAccountInput) {
         .from(transactions)
         .where(or(eq(transactions.accountId, id), eq(transactions.transferAccountId, id)))
         .get();
-      if (usage) {
-        badRequest("A moeda de uma conta com historico nao pode ser alterada.");
+      if (
+        usage ||
+        db.select().from(recurringTransactions).where(eq(recurringTransactions.accountId, id)).get()
+      ) {
+        badRequest("A moeda de uma conta com historico ou recorrencia nao pode ser alterada.");
       }
     }
     const initialBalanceCents = input.initialBalanceCents ?? account.initialBalanceCents;

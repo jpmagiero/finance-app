@@ -3,7 +3,16 @@ import rateLimit from "@fastify/rate-limit";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
-import { accounts, categories, householdPeople, payees, tags, transactions } from "../db/schema";
+import {
+  accounts,
+  budgets,
+  categories,
+  householdPeople,
+  payees,
+  recurringTransactions,
+  tags,
+  transactions,
+} from "../db/schema";
 import { env } from "../env";
 import { errorResponseSchema } from "../lib/docs";
 import { badRequest, forbidden, notFound } from "../lib/http";
@@ -78,7 +87,16 @@ export async function registerAuth(app: FastifyInstance) {
     }
     if (params.id) {
       const resource = path.split("/")[1];
-      const tables = { people: householdPeople, accounts, categories, payees, tags, transactions };
+      const tables = {
+        people: householdPeople,
+        accounts,
+        budgets,
+        categories,
+        payees,
+        recurring: recurringTransactions,
+        tags,
+        transactions,
+      };
       const table = tables[resource as keyof typeof tables];
       if (table) {
         const row = db
@@ -93,6 +111,8 @@ export async function registerAuth(app: FastifyInstance) {
     if (
       writes &&
       !path.startsWith("/transactions") &&
+      !path.startsWith("/recurring") &&
+      !path.startsWith("/budgets") &&
       !path.startsWith("/auth/") &&
       request.identity.role === "member"
     )

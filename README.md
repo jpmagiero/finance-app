@@ -13,20 +13,24 @@ em **2026-10-20**, a partir das decisoes discutidas e do codigo no commit
 **Estado atual:** backend financeiro com autenticacao/autorizacao e frontend
 funcional para cadastros, lancamentos e dashboard. Ha testes com SQLite temporario.
 API compilada, Compose/Caddy HTTPS e backups estao implementados; a implantacao
-no servidor ainda precisa de validacao com Docker ativo. Recorrencias e orcamentos continuam pendentes.
+no servidor ainda precisa de validacao com Docker ativo. Recorrencias agora estao implementadas com geracao explicita de pendentes;
+orcamentos tambem estao implementados, com limites por categoria e consumo
+confirmado/pendente por casa ou pessoa.
 Existir uma tabela nao significa que a feature esta pronta.
 
 Escopo confirmado em **2026-10-26**: primeira entrega com lancamentos e
 dashboard, acessada pela rede de casa ou VPN com logins individuais.
-Recorrencias e orcamentos ficam para depois. Veja o
+Recorrencias e orcamentos foram desenvolvidos na evolucao seguinte. Veja o
 [plano atualizado](docs/analise-e-plano-2026-10-26.md).
 
 | Documento | Conteudo |
 | --- | --- |
 | [Arquitetura e decisoes](docs/arquitetura.md) | Produto, escopo, stack escolhida, alternativas e justificativas |
-| [Banco de dados](docs/banco-de-dados.md) | Dicionario das 16 tabelas, relacionamentos, convencoes e migracao futura |
+| [Banco de dados](docs/banco-de-dados.md) | Dicionario das 18 tabelas, relacionamentos, convencoes e migracao futura |
 | [Regras de negocio](docs/regras-de-negocio.md) | Pessoas, casas, transacoes, saldos, categorias e settings |
 | [Acesso e interface](docs/acesso-e-interface.md) | Primeiro login, permissoes, proxy, fluxos e limites da entrega |
+| [Recorrencias](docs/recorrencias.md) | Regras, calendario, geracao de pendentes e idempotencia |
+| [Orcamentos](docs/orcamentos.md) | Limites por categoria, periodos, pessoa/casa e consumo |
 | [Producao](docs/producao.md) | Build/start, Compose, HTTPS, backups e restauracao |
 | [API](docs/api.md) | Endpoints existentes, parametros, exemplos, Swagger e erros |
 | [Desenvolvimento](docs/desenvolvimento.md) | Setup em outro computador, comandos, banco local e operacao |

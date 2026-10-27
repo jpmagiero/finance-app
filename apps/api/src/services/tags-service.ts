@@ -1,7 +1,7 @@
 import type { CreateTagInput, UpdateTagInput } from "@finance/shared";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { tags, transactionTags } from "../db/schema";
+import { recurringTags, tags, transactionTags } from "../db/schema";
 import { badRequest, notFound } from "../lib/http";
 import { createId } from "../lib/ids";
 import { now } from "../lib/normalize";
@@ -64,7 +64,7 @@ export function deleteTag(id: string) {
     .where(eq(transactionTags.tagId, id))
     .get();
 
-  if (usage) {
+  if (usage || db.select().from(recurringTags).where(eq(recurringTags.tagId, id)).get()) {
     badRequest("Tag em uso nao pode ser excluida.");
   }
 

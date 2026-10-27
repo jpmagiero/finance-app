@@ -193,3 +193,10 @@ Playwright e bundle/start da API, Compose/Caddy HTTPS e backup/restauracao.
 CI, contratos genericos restantes e validacao das imagens/containers no home
 server continuam pendentes; o daemon Docker nao estava disponivel. Consulte
 [estado atual](estado-e-proximos-passos.md) e [producao](producao.md).
+
+## Evolucao posterior autorizada: orcamentos
+
+Orcamentos agora possuem API/interface com limites por categoria, casa/pessoa,
+periodos salvos, moedas separadas, consumo confirmado/pendente, arquivamento e
+protecao contra sobreposicao. Veja [guia](orcamentos.md) e [estado atual](estado-e-proximos-passos.md).
+A prioridade do usuario e evoluir o app antes de validar o deploy.

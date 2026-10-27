@@ -17,8 +17,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { BudgetsView } from "./components/BudgetsView";
 import { CatalogsView } from "./components/Catalogs";
 import { Modal } from "./components/Modal";
+import { RecurringView } from "./components/RecurringView";
 import { SettingsView } from "./components/SettingsView";
 import { TransactionForm } from "./components/TransactionForm";
 import { ApiError, api, query, setCsrfToken } from "./lib/api";
@@ -27,7 +29,7 @@ import { statusLabels, typeLabels } from "./lib/models";
 import { dateLabel, money, today } from "./lib/money";
 
 const emptyFilters = { type: "", status: "", accountId: "", categoryId: "", tagId: "", search: "" };
-type Section = "dashboard" | "transactions" | "catalogs" | "settings";
+type Section = "dashboard" | "transactions" | "catalogs" | "settings" | "recurring" | "budgets";
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [checking, setChecking] = useState(true),
@@ -323,12 +325,16 @@ function Workspace({ session, onLogout }: { session: AuthSession; onLogout: () =
   const names: Record<Section, string> = {
     dashboard: "Visão geral",
     transactions: "Lançamentos",
+    budgets: "Orçamentos",
+    recurring: "Recorrências",
     catalogs: "Cadastros",
     settings: "Configurações",
   };
   const nav = [
     { id: "dashboard" as const, title: "Visão geral", icon: LayoutDashboard },
     { id: "transactions" as const, title: "Lançamentos", icon: List },
+    { id: "recurring" as const, title: "Recorrências", icon: RefreshCw },
+    { id: "budgets" as const, title: "Orçamentos", icon: Wallet },
     { id: "catalogs" as const, title: "Cadastros", icon: Wallet },
     { id: "settings" as const, title: "Configurações", icon: Settings },
   ];
@@ -628,6 +634,12 @@ function Workspace({ session, onLogout }: { session: AuthSession; onLogout: () =
                           <tr key={t.id}>
                             <td>
                               <strong>{t.description || typeLabels[t.type]}</strong>
+                              {t.isRecurring && (
+                                <small>
+                                  Recorrente · ocorrência de{" "}
+                                  {dateLabel(t.occurrenceDate ?? t.transactionDate)}
+                                </small>
+                              )}
                               <small>
                                 {catalogs.people.find((p) => p.id === t.personId)?.name ?? "Casa"}
                                 {t.accountId
@@ -721,6 +733,12 @@ function Workspace({ session, onLogout }: { session: AuthSession; onLogout: () =
                   </div>
                 </footer>
               </section>
+            )}
+            {section === "recurring" && (
+              <RecurringView data={catalogs} householdId={session.householdId} onChanged={reload} />
+            )}
+            {section === "budgets" && (
+              <BudgetsView data={catalogs} householdId={session.householdId} onChanged={reload} />
             )}
             {section === "catalogs" && (
               <CatalogsView

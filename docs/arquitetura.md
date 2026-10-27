@@ -19,7 +19,9 @@ pode receber um login posteriormente sem perder o historico.
 O MVP contempla cadastros de pessoas, contas opcionais, categorias, favorecidos,
 tags, receitas/despesas/transferencias, splits por categoria, settings da casa
 e dashboard mensal. Recorrencias e orcamentos foram incluidos no schema e no
-planejamento do MVP, mas suas rotas e processamento ainda precisam ser feitos.
+planejamento do MVP. Recorrencias agora possuem API e interface, com geracao
+explicita de pendentes. Orcamentos possuem API/interface com limites por
+categoria, casa/pessoa, periodos e moeda explicita.
 
 A prioridade anterior foi concluir a API; a interface financeira ja esta funcional.
 Previsao de gastos e renda fica para uma etapa posterior, com base no historico,
@@ -157,3 +159,21 @@ sao configuracoes do operador; CI ainda nao foi implementada.
 
 O objetivo e uma aplicacao simples em um home server. Jobs e workers separados
 so devem aparecer quando recorrencias ou tarefas de fundo exigirem.
+
+## Evolucao: recorrencias
+
+Calendario ancorado em startsAt, datas de negocio e geracao explicita de pendentes.
+Splits/tags do template sao relacionais; occurrenceDate preserva a chave de
+idempotencia independente da data editavel. A geracao reutiliza o service
+financeiro sob transacao imediata. Nao ha worker/scheduler novo. Veja
+[regras e contratos](recorrencias.md). A prioridade atual e evoluir o app;
+validacao do deploy foi postergada pelo usuario.
+
+## Evolucao: orcamentos
+
+Plano e itens usam tabelas existentes; migration 0003 adiciona currency e
+isArchived. Limites por categoria exata e consumo derivado dos splits de expense.
+Periodos ficam salvos, independentemente de settings futuros. Overlap e escrita
+de itens sao validados em transacao imediata; leituras de consumo usam snapshot
+SQLite. Nao ha scheduler, geracao de transacoes ou mudanca de saldos.
+Veja [regras e API](orcamentos.md).

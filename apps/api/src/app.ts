@@ -7,12 +7,14 @@ import { registerAuth } from "./plugins/auth";
 import { registerSwagger } from "./plugins/swagger";
 import { accountRoutes } from "./routes/accounts";
 import { authRoutes } from "./routes/auth";
+import { budgetRoutes } from "./routes/budgets";
 import { categoryRoutes } from "./routes/categories";
 import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
 import { householdRoutes } from "./routes/households";
 import { payeeRoutes } from "./routes/payees";
 import { peopleRoutes } from "./routes/people";
+import { recurringRoutes } from "./routes/recurring";
 import { settingsRoutes } from "./routes/settings";
 import { tagRoutes } from "./routes/tags";
 import { transactionRoutes } from "./routes/transactions";
@@ -70,6 +72,8 @@ export async function buildApp(options: FastifyServerOptions = {}) {
   app.register(settingsRoutes, {
     prefix: "/settings",
   });
+  app.register(budgetRoutes, { prefix: "/budgets" });
+  app.register(recurringRoutes, { prefix: "/recurring" });
   app.register(transactionRoutes, {
     prefix: "/transactions",
   });

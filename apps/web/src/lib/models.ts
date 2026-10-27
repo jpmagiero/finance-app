@@ -42,7 +42,13 @@ export type Catalogs = {
   tags: Named[];
   settings: Settings;
 };
-export type Transaction = CreateTransactionInput & { id: string; createdByUserId: string | null };
+export type Transaction = CreateTransactionInput & {
+  id: string;
+  createdByUserId: string | null;
+  isRecurring?: boolean;
+  recurringTransactionId?: string | null;
+  occurrenceDate?: string | null;
+};
 export type Dashboard = {
   month: string;
   from: string;
